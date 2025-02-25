@@ -110,17 +110,20 @@ Delimit Scope term_scope with term.
 Open Scope term_scope.
 
 Declare Custom Entry term_term.
+Declare Custom Entry term_name.
 
-Notation "x" := (ident_to_string x) (in custom term_term at level 0, x ident) : term_scope.
+Notation "x" := (var (ident_to_string x) 0) (in custom term_term at level 0, x ident) : term_scope.
 
 Notation "< x >" := x (x custom term_term).
 
 Notation "( t )" := t (in custom term_term at level 0, t custom term_term) : term_scope.
 Notation "x y" := (app x y) (in custom term_term at level 10, left associativity).
-Notation "'fun' x => y" := (lam (ident_to_string x) y)
-                             (in custom term_term at level 200, x ident,
+Notation "'fun' x => y" := (lam x y)
+                             (in custom term_term at level 200,
+                                 x custom term_name,
                                  y custom term_term at level 200,
                                  left associativity).
+Notation "x" := (ident_to_string x) (in custom term_name at level 0, x ident) : term_scope.
 (*
 Notation "'fun2' x1 x2 => y" := (lam (ident_to_string x1) (lam (ident_to_string x2) y))
                                   (in custom term_term at level 200,
@@ -134,21 +137,18 @@ Notation "t1 [ s @ i / t2 ]" := (subst t1 s i t2) (in custom term_term at level 
                                                       t1 custom term_term,
                                                       i custom term_term,
                                                       t2 custom term_term,
-                                                      s custom term_term) : term_scope.
+                                                      s custom term_name) : term_scope.
 Notation "t1 [ s / t2 ]" := (subst t1 s 0 t2) (in custom term_term at level 40,
                                                   t1 custom term_term,
                                                   t2 custom term_term,
-                                                  s custom term_term) : term_scope.
+                                                  s custom term_name) : term_scope.
 Notation "t1 [ s ]" := (lift s t1) (in custom term_term at level 40,
                                        t1 custom term_term,
-                                       s custom term_term) : term_scope.
+                                       s custom term_name) : term_scope.
 
 (* Unquote expression so you can refer to other QTerms in scope *)
 Notation "` x" := x (in custom term_term at level 0, x global) : term_scope.
-
-Definition var_coerce (s : string) := var s 0.
-Coercion var_coerce : string >-> QTerm.
-Arguments var_coerce _%_string.
+Notation "` x" := x (in custom term_name at level 0, x global) : term_scope.
 
 Compute <fun y => fun z => y (fun x => x y)>.
 
@@ -158,6 +158,9 @@ only for printing? *)
 Notation "a b" := (app a b) (at level 10, left associativity, only printing).
 Notation "s" := (var s 0) (at level 5, only printing).
 Notation "'fun' x => t" := (lam x t) (at level 200, right associativity,  only printing).
+(* For some mystery reason, the subtitution notation defined above already works for printing.
+Even though none of the other notations (all defined above in the same way) work for printing.*)
+Notation "t [ s ]" := (lift s t) (at level 300, only printing).
 
 Compute <fun y => fun z => y (fun x => x y)>.
 Definition metavar_example: QTerm. exact <fun x => x>. Qed.
@@ -175,10 +178,171 @@ Notation "t1 [ s ]" := (lift s t1) (at level 40).
 Axiom beta : forall (t1 t2 : QTerm) (s : string),
     <(fun `s => `t1) `t2> = <`t1 [ `s  / `t2 ]>.
 Axiom eta : forall (t : QTerm),
-    t = <fun x => t[x] x>.
+    t = <fun x => `t [x] x>.
+
+Definition var_coerce (s : string) := var s 0.
+Coercion var_coerce : string >-> QTerm.
+Arguments var_coerce _%_string.
+
+Axiom alpha : forall (x y : string) (t : QTerm),
+    <fun `x => `t> = <fun `y => `t[`x / `y]>.
 
 Check beta.
 Check eta.
+Check alpha.
+Check lift_app.
+
+Ltac normalize := repeat (rewrite ?lift_app, ?lift_lam, ?lift_var, ?subst_app, ?subst_lam, ?subst_var,
+                           ?beta; simpl).
+Ltac subst_lift_norm := repeat (rewrite ?lift_app, ?lift_lam, ?lift_var, ?subst_app, ?subst_lam,
+                                 ?subst_var ; simpl).
+Ltac normalize2 := repeat(rewrite ?beta ; subst_lift_norm).
+Ltac ben_norm := repeat (repeat (rewrite ?beta); subst_lift_norm).
+Ltac ben_norm2 := repeat (repeat (rewrite ?beta) ; repeat (rewrite ?subst_app) ;
+                          repeat (rewrite ?subst_lam ; simpl) ;
+                          repeat (rewrite ?subst_var ; simpl) ;
+                          repeat (rewrite ?lift_lam, ?lift_app, lift_var)).
+Ltac ben_norm3 := repeat (rewrite ?beta;
+                          repeat (rewrite ?subst_app) ;
+                          rewrite ?beta;
+                          repeat (rewrite ?subst_lam ; simpl) ;
+                          rewrite ?beta;
+                          repeat (rewrite ?subst_var ; simpl) ;
+                          rewrite ?beta;
+                          repeat (rewrite ?lift_lam, ?lift_app, lift_var)).
+
+Ltac subst_lift_norm2 := repeat (try (rewrite_strat innermost lift_app);
+                                try (rewrite_strat innermost lift_lam) ; simpl ;
+                                try (rewrite_strat innermost lift_var) ; simpl ;
+                                try (rewrite_strat innermost subst_app);
+                                try (rewrite_strat innermost subst_lam);
+                                try (rewrite_strat innermost subst_var);
+                                simpl).
+Ltac normalize3 := repeat(rewrite ?beta ; subst_lift_norm2).
+
+Theorem test_things : <(fun x => x) (fun y => y)> = <fun x => x>.
+Proof.
+  normalize.
+  eapply eq_trans.
+  apply alpha.
+  normalize.
+  reflexivity.
+Qed.
+
+Theorem speed_test : <(fun f => f (f (f (f (f (f (f (f (f (f (f (f result)))))))))))) (fun x => x)>
+                                = <result>.
+Proof.
+  Time ben_norm2.
+  reflexivity.
+Qed.
+(*The performance seems acceptable! There is maybe half a second delay there. Could be better though.*)
+
+Definition Y := <fun f => (fun x => f (x x)) (fun x => f (x x))>.
+Definition zero := <fun s => fun z => z>.
+Definition suc := <fun n => fun s => fun z => s (n s z)>.
+Definition fact' := <fun f => fun n => n (fun m => `suc (f m)) `zero>.
+Definition fact := <`Y `fact'>.
+
 (*
-TODO: The substitution notations should go in 
+Notation "'Y'" := <fun f => (fun x => f (x x)) (fun x => f (x x))>.
+Notation "'zero'" := <fun s => fun z => z>.
+Notation "'suc'" := <fun n => fun s => fun z => s (n s z)>.
+Notation "'fact1'" := <fun f => fun n => n zero (fun m => suc (f m))> : .
+Notation "'fact'" := <Y fact1>.
+*)
+
+Ltac ben_norm4 := repeat (repeat (rewrite beta) ;
+                          repeat (rewrite_strat innermost subst_app) ;
+                          repeat ((rewrite_strat innermost subst_lam) ; simpl) ;
+                          repeat ((rewrite_strat innermost subst_var) ; simpl) ;
+                          repeat (rewrite ?lift_lam, ?lift_app, lift_var)).
+
+Theorem speed_test2 : <`fact `zero> = zero.
+Proof.
+
+  unfold fact.
+  unfold zero.
+  unfold fact'.
+  unfold zero.
+  unfold Y.
+
+  (*
+  rewrite beta.
+  rewrite subst_app.
+  rewrite subst_lam; simpl.
+  rewrite beta.
+  rewrite subst_app.
+  
+  Time ben_norm4.
+   *)
+
+  (*
+  Time (
+  rewrite beta;
+  rewrite subst_app;
+  rewrite subst_lam;
+  simpl;
+  rewrite beta;
+  rewrite subst_app;
+  rewrite subst_var;
+  simpl;
+  rewrite subst_app;
+  rewrite subst_lam;
+  simpl;
+  rewrite beta;
+  rewrite subst_app;
+  rewrite subst_var;
+  simpl;
+  rewrite subst_lam;
+  simpl;
+  rewrite subst_lam;
+  simpl;
+  rewrite beta;
+  rewrite subst_app;
+  rewrite subst_lam;
+  simpl;
+  rewrite subst_lam;
+  simpl;
+  rewrite subst_var;
+  simpl;
+  rewrite subst_app;
+  rewrite subst_lam;
+  simpl;
+  repeat rewrite subst_app;
+  repeat (rewrite subst_var ; simpl);
+  rewrite beta;
+  rewrite subst_lam;
+  simpl;
+  rewrite subst_var;
+  simpl;
+  rewrite beta;
+  rewrite subst_var;
+  simpl;
+  ben_norm2).
+
+
+  Time ben_norm.
+   *)
+  reflexivity.
+Time Qed.
+
+Theorem speed_test3 : <`fact (`suc `zero)> = <`suc `zero>.
+Proof.
+  unfold fact.
+  unfold zero.
+  unfold fact'.
+  unfold zero.
+  unfold suc.
+  unfold Y.
+
+  Time ben_norm3.
+  reflexivity.
+Time Qed.
+
+(*
+Substs should be innermost first because of
+(x x)[x / [t[y/y]]]
+
+rewite ?a, ?b, ?c 
+will do any a before any b.
 *)
