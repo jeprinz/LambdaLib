@@ -1,0 +1,3 @@
+I learned how to set up a coq project by reading this comment https://coq.discourse.group/t/official-place-to-learn-how-to-setup-coq-make-files-for-beginner/1682/2
+And looking at https://github.com/coq-community/manifesto/wiki/Recommended-Project-Structure
+And also used Yiyun's project as an example: https://github.com/yiyunliu/sp-eta-postpone/tree/master
