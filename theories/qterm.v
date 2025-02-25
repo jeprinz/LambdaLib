@@ -7,6 +7,8 @@ Require Import Coq.Relations.Relation_Definitions.
 Require Import Coq.Classes.RelationClasses.
 From stdpp Require Import relations (rtsc, rtsc_congruence, rtsc_equivalence).
 
+Require Import IdentParsing.IdentParsing.
+
 Require Import quotient.
 Require Import terms1.
 
@@ -109,52 +111,74 @@ Open Scope term_scope.
 
 Declare Custom Entry term_term.
 
-Notation "x" := x (in custom term_term at level 0, x global) : term_scope.
+Notation "x" := (ident_to_string x) (in custom term_term at level 0, x ident) : term_scope.
 
 Notation "< x >" := x (x custom term_term).
 
 Notation "( t )" := t (in custom term_term at level 0, t custom term_term) : term_scope.
 Notation "x y" := (app x y) (in custom term_term at level 10, left associativity).
-Notation "'fun' x => y" := (lam x y) (in custom term_term at level 200, x global,
-                                         y custom term_term at level 200,
-                                         left associativity).
+Notation "'fun' x => y" := (lam (ident_to_string x) y)
+                             (in custom term_term at level 200, x ident,
+                                 y custom term_term at level 200,
+                                 left associativity).
+(*
+Notation "'fun2' x1 x2 => y" := (lam (ident_to_string x1) (lam (ident_to_string x2) y))
+                                  (in custom term_term at level 200,
+                                      x1 ident, x2 ident,
+                                      y custom term_term at level 200,
+                                      left associativity).
+
+ *)
+(* subst and lift notations *)
+Notation "t1 [ s @ i / t2 ]" := (subst t1 s i t2) (in custom term_term at level 40,
+                                                      t1 custom term_term,
+                                                      i custom term_term,
+                                                      t2 custom term_term,
+                                                      s custom term_term) : term_scope.
+Notation "t1 [ s / t2 ]" := (subst t1 s 0 t2) (in custom term_term at level 40,
+                                                  t1 custom term_term,
+                                                  t2 custom term_term,
+                                                  s custom term_term) : term_scope.
+Notation "t1 [ s ]" := (lift s t1) (in custom term_term at level 40,
+                                       t1 custom term_term,
+                                       s custom term_term) : term_scope.
+
+(* Unquote expression so you can refer to other QTerms in scope *)
+Notation "` x" := x (in custom term_term at level 0, x global) : term_scope.
+
 Definition var_coerce (s : string) := var s 0.
 Coercion var_coerce : string >-> QTerm.
 Arguments var_coerce _%_string.
 
-Definition x : string := "x".
-Compute <fun x => x x>.
+Compute <fun y => fun z => y (fun x => x y)>.
 
-Require Import IdentParsing.IdentParsing.
+(* It wont use those notations for printing. But maybe I should specify separate notations,
+only for printing? *)
 
+Notation "a b" := (app a b) (at level 10, left associativity, only printing).
+Notation "s" := (var s 0) (at level 5, only printing).
+Notation "'fun' x => t" := (lam x t) (at level 200, right associativity,  only printing).
+
+Compute <fun y => fun z => y (fun x => x y)>.
+Definition metavar_example: QTerm. exact <fun x => x>. Qed.
+Compute <fun x => x `metavar_example x>.
+
+
+(* Notations for subst and lift *)
 (*
-- How to make it so it works with any variable name and not just ones I've defined as strings?
-- How to make it print with notation as well as parse the notation?
-*)
-
-(* Notations *)
-
-Check var.
-
-Notation "` s @ i" := (var s i) (at level 50).
-Notation "` s" := (var s 0) (at level 50).
-Notation "s ==> t" := (lam s t) (at level 100).
-Infix "@" := app (at level 500, left associativity).
 Notation "t1 [ s @ i / t2 ]" := (subst t1 s i t2) (at level 40).
 Notation "t1 [ s / t2 ]" := (subst t1 s 0 t2) (at level 40, s at level 10).
 Notation "t1 [ s ]" := (lift s t1) (at level 40).
-
-Definition var_coerce (s : string) := var s 0.
-
-Coercion var_coerce : string >-> QTerm.
-Arguments var_coerce _%_string.
-
-Definition test : QTerm := "x" ==> `"x".
-
-Compute ("x" ==> "x").
-Compute ("x" ==> ` "x" @ `"x").
+*)
 
 (*Reduction rules*)
 Axiom beta : forall (t1 t2 : QTerm) (s : string),
-    ((s ==> t1) @ t2) = t1 [ s / t2 ].
- 
+    <(fun `s => `t1) `t2> = <`t1 [ `s  / `t2 ]>.
+Axiom eta : forall (t : QTerm),
+    t = <fun x => t[x] x>.
+
+Check beta.
+Check eta.
+(*
+TODO: The substitution notations should go in 
+*)
