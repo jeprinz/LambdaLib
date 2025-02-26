@@ -34,7 +34,8 @@ Ltac normalize3 := repeat(rewrite ?beta ; subst_lift_norm2).
 Ltac normalize4 := repeat (rewrite ?beta; repeat (rewrite ?subst_app) ;
                           repeat (rewrite ?subst_lam ; simpl) ;
                           repeat (rewrite ?subst_var ; simpl) ;
-                          repeat (rewrite ?lift_lam, ?lift_app, lift_var)).
+                           repeat (rewrite ?lift_lam, ?lift_app, lift_var)).
+
 
 Theorem test_things : <(fun x => x) (fun y => y)> = <fun x => x>.
 Proof.
@@ -73,16 +74,21 @@ Ltac ben_norm4 := repeat (repeat (rewrite beta) ;
                           repeat ((rewrite_strat innermost subst_var) ; simpl) ;
                           repeat (rewrite ?lift_lam, ?lift_app, lift_var)).
 
+Ltac normalize5 := repeat (rewrite beta; repeat (repeat (rewrite subst_app) ;
+                          repeat (rewrite subst_lam ; simpl) ;
+                          repeat (rewrite subst_var ; simpl;
+                                  repeat (rewrite lift_lam, lift_app, lift_var)))
+                          ).
+Ltac normalize6 := repeat (rewrite beta; repeat (try rewrite subst_app ;
+                          try (rewrite subst_lam ; simpl) ;
+                          try (rewrite subst_var ; simpl;
+                                  repeat (rewrite lift_lam, lift_app, lift_var)))
+                          ).
+
 Theorem speed_test2 : <`fact `zero> = zero.
 Proof.
-
-  unfold fact.
-  unfold zero.
-  unfold fact'.
-  unfold zero.
-  unfold Y.
-
-  Time normalize4.
+  unfold fact, zero, fact', zero, Y.
+  Time normalize6.
 
   (*
   Time (
@@ -143,7 +149,20 @@ Proof.
   unfold suc.
   unfold Y.
 
-  Time normalize4.
+  Time normalize6.
+  reflexivity.
+  Time Qed.
+
+Theorem speed_test4 : <`fact (`suc (`suc `zero))> = <`suc (`suc `zero)>.
+Proof.
+  unfold fact.
+  unfold zero.
+  unfold fact'.
+  unfold zero.
+  unfold suc.
+  unfold Y.
+
+  Time normalize5.
   reflexivity.
 Time Qed.
 
