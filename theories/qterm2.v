@@ -1,3 +1,4 @@
+
 (*
 A second take at quotiented terms, hopefully simpler now that the underlying syntactic
 terms have been defined more regularly
@@ -16,6 +17,37 @@ Print Equivalence.
 Check Build_Equivalence.
 Print Reflexive.
 
+Module Type LambdaSpec.
+  Parameter QTerm : Type.
+  Parameter app : QTerm -> QTerm -> QTerm.
+  Parameter lam : string -> QTerm -> QTerm.
+  Parameter var : string -> nat -> QTerm.
+  Parameter lift : string -> QTerm -> QTerm.
+  Parameter subst : string -> nat -> QTerm -> QTerm -> QTerm.
+  Parameter pair : QTerm -> QTerm -> QTerm.
+  Parameter pi1 : QTerm -> QTerm.
+  Parameter pi2 : QTerm -> QTerm.
+
+  Axiom lift_lam : forall (s1 s2 : string) (t : QTerm), lift s1 (lam s2 t) = lam s2 (lift s1 t).
+  Axiom lift_app : forall (s : string) (t1 t2 : QTerm), lift s (app t1 t2) = app (lift s t1) (lift s t2).
+  Axiom lift_var : forall (s1 s2 : string) (i : nat),
+      lift s1 (var s2 i) = (if (s1 =? s2)%string then var s2 (S i) else var s2 i).
+  Axiom subst_lam : forall (s1 s2 : string) (i : nat) (t1 t2 : QTerm),
+      subst s2 i t2 (lam s1 t1) =
+        (if (s1 =? s2)%string
+         then lam s1 (subst s2 (S i) (lift s2 t2) t1)
+         else lam s1 (subst s2 i t2 t1)).
+  Axiom subst_app : forall (s : string) (i : nat) (t1 t2 t3 : QTerm),
+      subst s i t3 (app t1 t2) = app (subst s i t3 t1) (subst s i t3 t2).
+  Axiom subst_var : forall (x y : string) (n i : nat) (toSub : QTerm),
+      subst x i toSub (var y n) = (if ((y =? x)%string && Nat.eqb n i)%bool then toSub else var y n).
+  Axiom beta : forall s t1 t2, app (lam s t1) t2 = subst s 0 t2 t1.
+  Axiom eta : forall (s : string) (t : QTerm), t = lam s (app (lift s t) (var s 0)).
+  Axiom alpha : forall (s1 s2 : string) (t : QTerm),
+    lam s1 t = lam s2 (subst s1 0 (var s2 0) t).
+End LambdaSpec.
+
+Module Lambda : LambdaSpec.
 (*https://stackoverflow.com/questions/77921199/coq-using-a-parametrized-type-from-within-a-module*)
 Module TermConversion <: EqRel.
   Definition A := Term.
@@ -145,13 +177,16 @@ Proof.
   apply subst_var.
 Qed.
 
-Ltac generalize_ind_QTerm2 :=
-  match goal with
-  | [ t1 : QTerm.t  |- _] => (generalize t1; clear t1; refine (QTerm.ind _ _); intro)
-  end
-.
+Theorem alpha : forall (s1 s2 : string) (t : QTerm),
+    lam s1 t = lam s2 (subst s1 0 (var s2 0) t).
+Proof.
+  intros.
+  unfold lam, subst, var.
+  quotient_map_eq_simpl.
+  apply alpha.
+Qed.
 
-Theorem beta : forall {s t1 t2}, (app (lam s t1) t2) = (subst s 0 t2 t1).
+Theorem beta : forall s t1 t2, (app (lam s t1) t2) = (subst s 0 t2 t1).
 Proof.
   intros.
   unfold app, lam, subst.
@@ -159,13 +194,17 @@ Proof.
   apply beta.
 Qed.
 
-Theorem eta : forall {s t}, t = (lam s (app (lift s t) (var s 0))).
+Theorem eta : forall s t, t = (lam s (app (lift s t) (var s 0))).
 Proof.
   intros.
   unfold lam, app, lift, var.
   quotient_map_eq_simpl.
   apply eta.
 Qed.
+
+End Lambda.
+
+Include Lambda.
 
 (*Copying from https://softwarefoundations.cis.upenn.edu/plf-current/Stlc.html#tm:3, not sure what
 all this does*)
@@ -239,11 +278,9 @@ Notation "t1 [ s ]" := (lift s t1) (at level 40).
 *)
 
 Definition var_coerce (s : string) := var s 0.
-Coercion var_coerce : string >-> QTerm.t.
+Coercion var_coerce : string >-> QTerm.
 Arguments var_coerce _%_string.
 
-Axiom alpha : forall (x y : string) (t : QTerm),
-    <fun `x => `t> = <fun `y => `t[`x / `y]>.
 
 Check beta.
 Check eta.

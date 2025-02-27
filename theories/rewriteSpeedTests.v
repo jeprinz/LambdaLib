@@ -1,5 +1,5 @@
 Require Import String.
-Require Import qterm.
+Require Import qterm2.
 
 Compute <fun x => x>.
 Compute <fun y => fun z => y (fun x => x y)>.
@@ -88,7 +88,7 @@ Ltac normalize6 := repeat (rewrite beta; repeat (try rewrite subst_app ;
 Theorem speed_test2 : <`fact `zero> = zero.
 Proof.
   unfold fact, zero, fact', zero, Y.
-  Time normalize6.
+  Time normalize5.
 
   (*
   Time (
@@ -149,7 +149,7 @@ Proof.
   unfold suc.
   unfold Y.
 
-  Time normalize6.
+  Time normalize5.
   reflexivity.
   Time Qed.
 
