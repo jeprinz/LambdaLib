@@ -1,28 +1,64 @@
+
 (*
-In this file, I will define terms quotiented by conversion,
-using a quotient
+A second take at quotiented terms, hopefully simpler now that the underlying syntactic
+terms have been defined more regularly
 *)
 Require Import String.
 Require Import Coq.Relations.Relation_Definitions.
 Require Import Coq.Classes.RelationClasses.
-From stdpp Require Import relations (rtsc, rtsc_congruence, rtsc_equivalence).
 
 Require Import IdentParsing.IdentParsing.
 
 Require Import quotient.
-Require Import terms1.
+Require Import term.
 
-
-Check rtsc.
 
 Print Equivalence.
+Check Build_Equivalence.
+Print Reflexive.
 
+Module Type LambdaSpec.
+  Parameter QTerm : Type.
+  Parameter app : QTerm -> QTerm -> QTerm.
+  Parameter lam : string -> QTerm -> QTerm.
+  Parameter var : string -> nat -> QTerm.
+  Parameter lift : string -> QTerm -> QTerm.
+  Parameter subst : string -> nat -> QTerm -> QTerm -> QTerm.
+  Parameter pair : QTerm -> QTerm -> QTerm.
+  Parameter pi1 : QTerm -> QTerm.
+  Parameter pi2 : QTerm -> QTerm.
+  Parameter const : string -> QTerm.
+
+  Parameter lift_lam : forall (s1 s2 : string) (t : QTerm), lift s1 (lam s2 t) = lam s2 (lift s1 t).
+  Parameter lift_app : forall (s : string) (t1 t2 : QTerm), lift s (app t1 t2) = app (lift s t1) (lift s t2).
+  Parameter lift_var : forall (s1 s2 : string) (i : nat),
+      lift s1 (var s2 i) = (if (s1 =? s2)%string then var s2 (S i) else var s2 i).
+  Parameter lift_const : forall s1 s2, lift s1 (const s2) = const s2.
+  Parameter subst_lam : forall (s1 s2 : string) (i : nat) (t1 t2 : QTerm),
+      subst s2 i t2 (lam s1 t1) =
+        (if (s1 =? s2)%string
+         then lam s1 (subst s2 (S i) (lift s1 t2) t1)
+         else lam s1 (subst s2 i t2 t1)).
+  Parameter subst_app : forall (s : string) (i : nat) (t1 t2 t3 : QTerm),
+      subst s i t3 (app t1 t2) = app (subst s i t3 t1) (subst s i t3 t2).
+  Parameter subst_var : forall (x y : string) (n i : nat) (toSub : QTerm),
+      subst x i toSub (var y n) = (if ((y =? x)%string && Nat.eqb n i)%bool then toSub else var y n).
+  Parameter subst_const : forall s1 s2 i t, subst s1 i t (const s2) = const s2.
+  Parameter beta : forall s t1 t2, app (lam s t1) t2 = subst s 0 t2 t1.
+  Parameter eta : forall (s : string) (t : QTerm), t = lam s (app (lift s t) (var s 0)).
+  Parameter alpha : forall (s1 s2 : string) (t : QTerm),
+      lam s1 t = lam s2 (subst s1 0 (var s2 0) t).
+
+  Parameter subst_id : forall s i t, subst s i (var s i) t = t.
+  Parameter consistency : exists (t1 t2 : QTerm), not (t1 = t2).
+End LambdaSpec.
+
+Module Lambda : LambdaSpec.
 (*https://stackoverflow.com/questions/77921199/coq-using-a-parametrized-type-from-within-a-module*)
 Module TermConversion <: EqRel.
   Definition A := Term.
-  (* conversion is the reflexive transitive symmetric closure of single steps *)
-  Definition R := rtsc step.
-  Definition eqRel := @rtsc_equivalence Term step.
+  Definition R := convertible.
+  Definition eqRel := Build_Equivalence convertible conv_refl conv_sym conv_trans.
 End TermConversion.
 Import TermConversion.
 
@@ -30,76 +66,189 @@ Module QTerm := Quotient TermConversion.
 
 Definition QTerm := QTerm.t.
 
-Definition app (t1 t2 : QTerm) : QTerm.
-Proof.
-  refine (QTerm.map2 terms1.app _ t1 t2).
-  intros.
-  assert (R (terms1.app a c) (terms1.app a d)).
-  unfold R.
-  apply (@rtsc_congruence _ step _ _ step c d).
-  intros.
-  apply app_cong2.
-  apply H1.
-  apply H0.
-  apply (@Equivalence_Transitive _ _ eqRel _ _ _ H1).
-  apply (@rtsc_congruence _ step _ (fun x => terms1.app x d) step a b).
-  intros.
-  apply app_cong1. apply H2.
-  apply H.
-Qed.
+(* TODO: its possible that I need these definitions to not unfold in order to be performant? *)
+Definition app := QTerm.map2 app app_cong.
+Definition lam s := QTerm.map (lam s) (lam_cong s).
+Definition var s i := QTerm.mk (var s i).
+Definition lift s := QTerm.map (lift s) (lift_cong s).
+Definition subst s i := QTerm.map2 (subst s i) (subst_cong s i).
+Definition pair := QTerm.map2 pair pair_cong.
+Definition pi1 := QTerm.map pi1 pi1_cong.
+Definition pi2 := QTerm.map pi2 pi2_cong.
+Definition const s := QTerm.mk (constant s).
 
-Definition lam (name : string) (t : QTerm) : QTerm.
-Proof.
-  refine (QTerm.map (lam name) _ t).
-  intros.
-  apply (@rtsc_congruence _ step _ _ step a b).
-  intros.
-  apply lam_cong. apply H0.
-  apply H.
-Qed.
+Check QTerm.sound.
+Check lift_lam.
 
-(* There is an issue where I need var to not unfold by default so that notations can work well.
-Qed is just a temporary solution. *)
-Definition var (name : string) (index : nat) : QTerm.
-  exact (QTerm.mk (var name index)).
-Qed.
 
-Definition lift (name : string) (t : QTerm) : QTerm.
-Proof.
-  refine (QTerm.map (fun t => lift t name) _ t).
-  intros.
-Admitted.  
+(* If we have a Quot.t in context, we can apply the quotient induction principle to
+assume that it is of the form (Quot.mk a). *)
+Ltac generalize_ind_QTerm :=
+  match goal with
+  | [ x : QTerm  |- _] => (generalize x; clear x; refine (QTerm.ind _ _); intro)
+  | [ x : QTerm.t  |- _] => (generalize x; clear x; refine (QTerm.ind _ _); intro)
+  end
+.
 
-Definition subst (t : QTerm) (name : string) (index : nat) (toSub : QTerm) : QTerm.
-Admitted.
+Ltac quotient_map_eq_simpl :=
+  repeat generalize_ind_QTerm;
+  repeat (rewrite ?QTerm.map2_eq, ?QTerm.map_eq);
+  apply QTerm.sound.
 
-(* To define these correctly will require a substantial amount of work to implement all of the
-usual facts about lifting and substitution and how they commute with reduction.
-Before I put in the hours to do that, I'll test out that the whole plan will work by axiomatizing
-what the result would be:*)
 
-(*Lift and subst defining equations*)
-Check lift.
-Axiom lift_app : forall (s : string) (t1 t2 : QTerm),
-    lift s (app t1 t2) = app (lift s t1) (lift s t2).
-Axiom lift_lam : forall (s1 s2 : string) (t : QTerm),
+Theorem lift_lam : forall (s1 s2 : string) (t : QTerm),
     lift s1 (lam s2 t) = lam s2 (lift s1 t).
-Axiom lift_var : forall (s1 s2 : string) (i : nat),
+Proof.
+  (*
+  intros.
+  generalize t.
+  Check QTerm.ind.
+  apply QTerm.ind.
+  intros.
+  unfold lift, lam.
+  repeat rewrite QTerm.map_eq.
+  apply QTerm.sound.
+  apply lift_lam.
+   *)
+  intros.
+  unfold lift, lam.
+  quotient_map_eq_simpl.
+  apply lift_lam.
+Qed.
+
+Theorem lift_app : forall (s : string) (t1 t2 : QTerm),
+    lift s (app t1 t2) = app (lift s t1) (lift s t2).
+Proof.
+  intros.
+  unfold lift, app.
+  quotient_map_eq_simpl.
+  apply lift_app.
+Qed.
+
+Lemma if_commute {A B : Type} (f : A -> B) (b : bool) (x y : A)
+  : (if b then f x else f y) = f (if b then x else y).
+Proof.
+  destruct b; reflexivity.
+Qed.
+    
+Theorem lift_var : forall (s1 s2 : string) (i : nat),
     lift s1 (var s2 i) =
       if String.eqb s1 s2
       then var s2 (S i)
       else var s2 i.
-Axiom subst_app : forall (s : string) (i : nat) (t1 t2 t3 : QTerm),
-    subst (app t1 t2) s i t3 = app (subst t1 s i t3) (subst t2 s i t3).
-Axiom subst_lam : forall (s1 s2 : string) (i : nat) (t1 t2 : QTerm),
-    subst (lam s1 t1) s2 i t2 =
-      if String.eqb s1 s2
-      then lam s1 (subst t1 s2 (S i) (lift s2 t2))
-      else lam s1 (subst t1 s2 i t2).
-Axiom subst_var : forall x y n i toSub,
-    subst (var y n) x i toSub =
-    if andb (String.eqb y x) (Nat.eqb n i) then toSub else var y n.
+Proof.
+  intros.
+  unfold lift, var.
+  rewrite if_commute.
+  quotient_map_eq_simpl.
+  apply lift_var.
+Qed.
 
+Theorem subst_app : forall (s : string) (i : nat) (t1 t2 t3 : QTerm),
+    subst s i t3 (app t1 t2) = app (subst s i t3 t1) (subst s i t3 t2).
+Proof.
+  intros.
+  unfold subst, app.
+  quotient_map_eq_simpl.
+  apply subst_app.
+Qed.
+
+Theorem subst_lam : forall (s1 s2 : string) (i : nat) (t1 t2 : QTerm),
+    subst s2 i t2 (lam s1 t1) =
+      if String.eqb s1 s2
+      then lam s1 (subst s2 (S i) (lift s1 t2) t1)
+      else lam s1 (subst s2 i t2 t1).
+Proof.
+  intros.
+  unfold subst, lam, lift.
+  rewrite if_commute.
+  repeat generalize_ind_QTerm.
+  repeat (rewrite ?QTerm.map2_eq, ?QTerm.map_eq).
+  rewrite if_commute.
+  rewrite QTerm.map_eq.
+  apply QTerm.sound.
+  rewrite <- if_commute.
+  apply subst_lam.
+Qed.
+
+Theorem subst_var : forall x y n i toSub,
+    subst x i toSub (var y n) =
+    if andb (String.eqb y x) (Nat.eqb n i) then toSub else var y n.
+Proof.
+  intros.
+  unfold subst, var.
+  generalize_ind_QTerm.
+  repeat (rewrite ?QTerm.map2_eq, ?QTerm.map_eq).
+  rewrite if_commute.
+  apply QTerm.sound.
+  apply subst_var.
+Qed.
+
+Theorem alpha : forall (s1 s2 : string) (t : QTerm),
+    lam s1 t = lam s2 (subst s1 0 (var s2 0) t).
+Proof.
+  intros.
+  unfold lam, subst, var.
+  quotient_map_eq_simpl.
+  apply alpha.
+Qed.
+
+Theorem beta : forall s t1 t2, (app (lam s t1) t2) = (subst s 0 t2 t1).
+Proof.
+  intros.
+  unfold app, lam, subst.
+  quotient_map_eq_simpl.
+  apply beta.
+Qed.
+
+Theorem eta : forall s t, t = (lam s (app (lift s t) (var s 0))).
+Proof.
+  intros.
+  unfold lam, app, lift, var.
+  quotient_map_eq_simpl.
+  apply eta.
+Qed.
+
+Theorem lift_const : forall s1 s2, lift s1 (const s2) = const s2.
+Proof.
+  intros.
+  unfold lift, const.
+  quotient_map_eq_simpl.
+  apply lift_const.
+Qed.
+
+Theorem subst_const : forall s1 s2 i t, subst s1 i t (const s2) = const s2.
+Proof.
+  intros.
+  unfold subst, const.
+  quotient_map_eq_simpl.
+  apply subst_const.
+Qed.
+
+Theorem subst_id : forall s i t, subst s i (var s i) t = t.
+Proof.
+  intros.
+  unfold subst, var.
+  quotient_map_eq_simpl.
+  apply subst_id.
+Qed.
+
+Theorem consistency : exists (t1 t2 : QTerm), not (t1 = t2).
+Proof.
+  pose consistency as consistent.
+  destruct consistent as [t1 H].
+  destruct H as [t2 p].
+  exists (QTerm.mk t1).
+  exists (QTerm.mk t2).
+  intro eq.
+  apply p.
+  apply QTerm.complete.
+  apply eq.
+Qed.
+
+End Lambda.
+
+Include Lambda.
 
 (*Copying from https://softwarefoundations.cis.upenn.edu/plf-current/Stlc.html#tm:3, not sure what
 all this does*)
@@ -131,12 +280,12 @@ Notation "'fun2' x1 x2 => y" := (lam (ident_to_string x1) (lam (ident_to_string 
 
  *)
 (* subst and lift notations *)
-Notation "t1 [ s @ i / t2 ]" := (subst t1 s i t2) (in custom term_term at level 40,
+Notation "t1 [ s @ i / t2 ]" := (subst s i t2 t1) (in custom term_term at level 40,
                                                       t1 custom term_term,
                                                       i custom term_term,
                                                       t2 custom term_term,
                                                       s custom term_name) : term_scope.
-Notation "t1 [ s / t2 ]" := (subst t1 s 0 t2) (in custom term_term at level 40,
+Notation "t1 [ s / t2 ]" := (subst s 0 t2 t1) (in custom term_term at level 40,
                                                   t1 custom term_term,
                                                   t2 custom term_term,
                                                   s custom term_name) : term_scope.
@@ -167,26 +316,21 @@ Compute <fun x => x `metavar_example x>.
 
 (* Notations for subst and lift *)
 (*
-Notation "t1 [ s @ i / t2 ]" := (subst t1 s i t2) (at level 40).
-Notation "t1 [ s / t2 ]" := (subst t1 s 0 t2) (at level 40, s at level 10).
+Notation "t1 [ s @ i / t2 ]" := (subst s i t2 t1) (at level 40).
+Notation "t1 [ s / t2 ]" := (subst s 0 t2 t1) (at level 40, s at level 10).
 Notation "t1 [ s ]" := (lift s t1) (at level 40).
 *)
-
-(*Reduction rules*)
-Axiom beta : forall (t1 t2 : QTerm) (s : string),
-    <(fun `s => `t1) `t2> = <`t1 [ `s  / `t2 ]>.
-Axiom eta : forall (t : QTerm),
-    t = <fun x => `t [x] x>.
 
 Definition var_coerce (s : string) := var s 0.
 Coercion var_coerce : string >-> QTerm.
 Arguments var_coerce _%_string.
 
-Axiom alpha : forall (x y : string) (t : QTerm),
-    <fun `x => `t> = <fun `y => `t[`x / `y]>.
 
 Check beta.
 Check eta.
 Check alpha.
 Check lift_app.
 
+(* So there is an issue where I need to hide the definitions.
+Maybe make a module? *)
+Compute <fun x => fun y => x y y>.

@@ -1,5 +1,5 @@
 Require Import String.
-Require Import qterm2.
+Require Import qterm.
 
 Compute <fun x => x>.
 Compute <fun y => fun z => y (fun x => x y)>.
@@ -36,7 +36,32 @@ Ltac normalize4 := repeat (rewrite ?beta; repeat (rewrite ?subst_app) ;
                           repeat (rewrite ?subst_var ; simpl) ;
                            repeat (rewrite ?lift_lam, ?lift_app, lift_var)).
 
+Ltac ben_norm4 := repeat (repeat (rewrite beta) ;
+                          repeat (rewrite_strat innermost subst_app) ;
+                          repeat ((rewrite_strat innermost subst_lam) ; simpl) ;
+                          repeat ((rewrite_strat innermost subst_var) ; simpl) ;
+                          repeat (rewrite ?lift_lam, ?lift_app, lift_var)).
 
+Ltac normalize5 := repeat (rewrite beta; repeat (repeat (rewrite subst_app) ;
+                          repeat (rewrite subst_lam ; simpl) ;
+                          repeat (rewrite subst_var ; simpl;
+                                  repeat (rewrite lift_lam, lift_app, lift_var)))
+                          ).
+Ltac normalize6 := repeat (rewrite beta; repeat (try rewrite subst_app ;
+                          try (rewrite subst_lam ; simpl) ;
+                          try (rewrite subst_var ; simpl;
+                                  repeat (rewrite lift_lam, lift_app, lift_var)))
+                          ).
+
+
+(*****)
+
+Theorem example1 : <(fun x => x) (fun x => x)> = <fun x => x>.
+Proof.
+  normalize5.
+  reflexivity.
+Qed.
+  
 Theorem test_things : <(fun x => x) (fun y => y)> = <fun x => x>.
 Proof.
   normalize.
@@ -49,7 +74,8 @@ Qed.
 Theorem speed_test : <(fun f => f (f (f (f (f (f (f (f (f (f (f (f result)))))))))))) (fun x => x)>
                                 = <result>.
 Proof.
-  Time ben_norm2.
+  Time normalize6.
+  (*Time ben_norm2.*)
   reflexivity.
 Qed.
 (*The performance seems acceptable! There is maybe half a second delay there. Could be better though.*)
@@ -68,27 +94,12 @@ Notation "'fact1'" := <fun f => fun n => n zero (fun m => suc (f m))> : .
 Notation "'fact'" := <Y fact1>.
 *)
 
-Ltac ben_norm4 := repeat (repeat (rewrite beta) ;
-                          repeat (rewrite_strat innermost subst_app) ;
-                          repeat ((rewrite_strat innermost subst_lam) ; simpl) ;
-                          repeat ((rewrite_strat innermost subst_var) ; simpl) ;
-                          repeat (rewrite ?lift_lam, ?lift_app, lift_var)).
 
-Ltac normalize5 := repeat (rewrite beta; repeat (repeat (rewrite subst_app) ;
-                          repeat (rewrite subst_lam ; simpl) ;
-                          repeat (rewrite subst_var ; simpl;
-                                  repeat (rewrite lift_lam, lift_app, lift_var)))
-                          ).
-Ltac normalize6 := repeat (rewrite beta; repeat (try rewrite subst_app ;
-                          try (rewrite subst_lam ; simpl) ;
-                          try (rewrite subst_var ; simpl;
-                                  repeat (rewrite lift_lam, lift_app, lift_var)))
-                          ).
 
 Theorem speed_test2 : <`fact `zero> = zero.
 Proof.
   unfold fact, zero, fact', zero, Y.
-  Time normalize5.
+  Time normalize6.
 
   (*
   Time (

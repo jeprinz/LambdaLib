@@ -15,7 +15,8 @@ so it is better to build the congruence rules into the relation like this.
 Inductive Constant :=
 | pi1c : Constant
 | pi2c : Constant
-| pairc : Constant.
+| pairc : Constant
+| stringc : string -> Constant.
 
 Inductive Term : Type :=
 | lam : string -> Term -> Term
@@ -26,10 +27,10 @@ Inductive Term : Type :=
 (* the var info, the term being subbed for the var, the term being subbed into *)
 | subst : string -> nat -> Term -> Term -> Term.
 
-
 Definition pair t1 t2 := (app (app (const pairc) t1) t2).
 Definition pi1 t := app (const pi1c) t.
 Definition pi2 t := app (const pi2c) t.
+Definition constant (s : string) : Term := const (stringc s).
 
 Inductive convertible : Term -> Term -> Prop :=
 | alpha : forall s1 s2 t, convertible (lam s1 t) (lam s2 (subst s1 0 (var s2 0) t))
@@ -58,15 +59,19 @@ Inductive convertible : Term -> Term -> Prop :=
       (if String.eqb s1 s2
       then var s2 (S i)
        else var s2 i)
+| lift_const : forall s1 s2, convertible (lift s1 (const s2)) (const s2)
 | subst_app : forall s i t t1 t2,
     convertible (subst s i t (app t1 t2)) (app (subst s i t t1) (subst s i t t2))
 | subst_lam : forall s1 s2 i t1 t2,
     convertible (subst s2 i t2 (lam s1 t1))
                 (if String.eqb s1 s2
-                 then lam s1 (subst s2 (S i) (lift s2 t2) t1)
+                 then lam s1 (subst s2 (S i) (lift s1 t2) t1)
                  else lam s1 (subst s2 i t2 t1))
 | subst_var : forall x y n i toSub, convertible (subst x i toSub (var y n))
     (if andb (String.eqb y x) (Nat.eqb n i) then toSub else var y n)
+| subst_const : forall s1 s2 i t, convertible (subst s1 i t (const s2)) (const s2)
+(* extra facts *)
+| subst_id : forall s i t, convertible (subst s i (var s i) t) t
 .
 
 Theorem pi1_cong : forall t t', convertible t t' -> convertible (pi1 t) (pi1 t').
@@ -95,3 +100,10 @@ Proof.
   apply H.
   apply H0.
 Qed.
+
+(*
+For now, consistency will be an axiom. Eventually I will prove it by mapping this whole system
+into lambda-FP, following Støvring.
+*)
+
+Axiom consistency : exists t1 t2, not (convertible t1 t2).
