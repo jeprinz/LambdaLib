@@ -86,11 +86,10 @@ Proof.
   normalize eq.
   rewrite H1 in eq.
   simpl in eq.
+  rewrite subst_lift in eq.
+  exfalso.
+  apply p.
+  apply eq.
+Qed.
 
-  (*
-    The fact that this doesn't work shows that there is a problem with my substitution rules.
-    The t1 that we get should have been lifted by s2,
-    and then the subst and lift should have cancleded out.
-    This should work.
-   *)
  

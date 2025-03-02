@@ -38,7 +38,7 @@ Module Type LambdaSpec.
       subst s2 i t2 (lam s1 t1) =
         (if (s1 =? s2)%string
          then lam s1 (subst s2 (S i) (lift s1 t2) t1)
-         else lam s1 (subst s2 i t2 t1)).
+         else lam s1 (subst s2 i (lift s1 t2) t1)).
   Parameter subst_app : forall (s : string) (i : nat) (t1 t2 t3 : QTerm),
       subst s i t3 (app t1 t2) = app (subst s i t3 t1) (subst s i t3 t2).
   Parameter subst_var : forall (x y : string) (n i : nat) (toSub : QTerm),
@@ -50,6 +50,7 @@ Module Type LambdaSpec.
       lam s1 t = lam s2 (subst s1 0 (var s2 0) t).
 
   Parameter subst_id : forall s i t, subst s i (var s i) t = t.
+  Parameter subst_lift : forall s t1 t2, subst s 0 t1 (lift s t2) = t2.
   Parameter consistency : exists (t1 t2 : QTerm), not (t1 = t2).
 End LambdaSpec.
 
@@ -157,7 +158,7 @@ Theorem subst_lam : forall (s1 s2 : string) (i : nat) (t1 t2 : QTerm),
     subst s2 i t2 (lam s1 t1) =
       if String.eqb s1 s2
       then lam s1 (subst s2 (S i) (lift s1 t2) t1)
-      else lam s1 (subst s2 i t2 t1).
+      else lam s1 (subst s2 i (lift s1 t2) t1).
 Proof.
   intros.
   unfold subst, lam, lift.
@@ -231,6 +232,14 @@ Proof.
   unfold subst, var.
   quotient_map_eq_simpl.
   apply subst_id.
+Qed.
+
+Theorem subst_lift : forall s t1 t2, subst s 0 t1 (lift s t2) = t2.
+Proof.
+  intros.
+  unfold subst, lift.
+  quotient_map_eq_simpl.
+  apply subst_lift.
 Qed.
 
 Theorem consistency : exists (t1 t2 : QTerm), not (t1 = t2).
@@ -334,3 +343,4 @@ Check lift_app.
 (* So there is an issue where I need to hide the definitions.
 Maybe make a module? *)
 Compute <fun x => fun y => x y y>.
+ 

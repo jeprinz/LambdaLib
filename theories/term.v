@@ -62,16 +62,21 @@ Inductive convertible : Term -> Term -> Prop :=
 | lift_const : forall s1 s2, convertible (lift s1 (const s2)) (const s2)
 | subst_app : forall s i t t1 t2,
     convertible (subst s i t (app t1 t2)) (app (subst s i t t1) (subst s i t t2))
+(* Is this right now? *)
 | subst_lam : forall s1 s2 i t1 t2,
     convertible (subst s2 i t2 (lam s1 t1))
                 (if String.eqb s1 s2
                  then lam s1 (subst s2 (S i) (lift s1 t2) t1)
-                 else lam s1 (subst s2 i t2 t1))
+                 else lam s1 (subst s2 i (lift s1 t2) t1))
 | subst_var : forall x y n i toSub, convertible (subst x i toSub (var y n))
     (if andb (String.eqb y x) (Nat.eqb n i) then toSub else var y n)
 | subst_const : forall s1 s2 i t, convertible (subst s1 i t (const s2)) (const s2)
 (* extra facts *)
 | subst_id : forall s i t, convertible (subst s i (var s i) t) t
+| subst_lift : forall s t1 t2, convertible (subst s 0 t1 (lift s t2)) t2
+(*| subst_subst : forall s1 i1 t1 s2 i2 t2 t,
+    convertible (subst s1 i1 t1 (subst s2 i2 t2 t)) (subst s2 ????*)
+(* lift_lift ???*)                                           
 .
 
 Theorem pi1_cong : forall t t', convertible t t' -> convertible (pi1 t) (pi1 t').
