@@ -22,24 +22,26 @@ Module Type LambdaSpec.
   Parameter app : QTerm -> QTerm -> QTerm.
   Parameter lam : string -> QTerm -> QTerm.
   Parameter var : string -> nat -> QTerm.
-  Parameter lift : string -> QTerm -> QTerm.
+  Parameter lift : string -> nat -> QTerm -> QTerm.
   Parameter subst : string -> nat -> QTerm -> QTerm -> QTerm.
   Parameter pair : QTerm -> QTerm -> QTerm.
   Parameter pi1 : QTerm -> QTerm.
   Parameter pi2 : QTerm -> QTerm.
   Parameter const : string -> QTerm.
 
-  Parameter lift_lam : forall (s1 s2 : string) (t : QTerm), lift s1 (lam s2 t) = lam s2 (lift s1 t).
-  Parameter lift_app : forall (s : string) (t1 t2 : QTerm), lift s (app t1 t2) = app (lift s t1) (lift s t2).
-  Parameter lift_var : forall (s1 s2 : string) (i : nat),
-      lift s1 (var s2 i) = (if (s1 =? s2)%string then var s2 (S i) else var s2 i).
-  Parameter lift_const : forall s1 s2, lift s1 (const s2) = const s2.
-  Parameter lift_pair : forall s t1 t2, lift s (pair t1 t2) = pair (lift s t1) (lift s t2).
+  Parameter lift_lam : forall (s1 s2 : string) (i : nat) (t : QTerm),
+      lift s1 i (lam s2 t) = lam s2 (lift s1 (if eqb s1 s2 then S i else i) t).
+  Parameter lift_app : forall s i t1 t2, lift s i (app t1 t2) = app (lift s i t1) (lift s i t2).
+  Parameter lift_var : forall (s1 s2 : string) (i k : nat),
+      lift s1 k (var s2 i) = (if andb (s1 =? s2)%string (negb (Nat.ltb i k)) then var s2 (S i) else var s2 i).
+  Parameter lift_const : forall s1 s2 i , lift s1 i (const s2) = const s2.
+  Parameter lift_pair : forall s i t1 t2, lift s i (pair t1 t2) = pair (lift s i t1) (lift s i t2).
+
   Parameter subst_lam : forall (s1 s2 : string) (i : nat) (t1 t2 : QTerm),
       subst s2 i t2 (lam s1 t1) =
         (if (s1 =? s2)%string
-         then lam s1 (subst s2 (S i) (lift s1 t2) t1)
-         else lam s1 (subst s2 i (lift s1 t2) t1)).
+         then lam s1 (subst s2 (S i) (lift s1 0 t2) t1)
+         else lam s1 (subst s2 i (lift s1 0 t2) t1)).
   Parameter subst_app : forall (s : string) (i : nat) (t1 t2 t3 : QTerm),
       subst s i t3 (app t1 t2) = app (subst s i t3 t1) (subst s i t3 t2).
   Parameter subst_var : forall (x y : string) (n i : nat) (toSub : QTerm),
@@ -50,12 +52,12 @@ Module Type LambdaSpec.
   Parameter beta : forall s t1 t2, app (lam s t1) t2 = subst s 0 t2 t1.
   Parameter betapi1 : forall t1 t2, pi1 (pair t1 t2) = t1.
   Parameter betapi2 : forall t1 t2, pi2 (pair t1 t2) = t2.
-  Parameter eta : forall (s : string) (t : QTerm), t = lam s (app (lift s t) (var s 0)).
+  Parameter eta : forall (s : string) (t : QTerm), t = lam s (app (lift s 0 t) (var s 0)).
   Parameter alpha : forall (s1 s2 : string) (t : QTerm),
       lam s1 t = lam s2 (subst s1 0 (var s2 0) t).
 
   Parameter subst_id : forall s i t, subst s i (var s i) t = t.
-  Parameter subst_lift : forall s t1 t2, subst s 0 t1 (lift s t2) = t2.
+  Parameter subst_lift : forall s i t1 t2, subst s i t1 (lift s i t2) = t2.
   Parameter consistency : exists (t1 t2 : QTerm), not (t1 = t2).
 End LambdaSpec.
 
@@ -76,7 +78,7 @@ Definition QTerm := QTerm.t.
 Definition app := QTerm.map2 app app_cong.
 Definition lam s := QTerm.map (lam s) (lam_cong s).
 Definition var s i := QTerm.mk (var s i).
-Definition lift s := QTerm.map (lift s) (lift_cong s).
+Definition lift s i := QTerm.map (lift s i) (lift_cong s i).
 Definition subst s i := QTerm.map2 (subst s i) (subst_cong s i).
 Definition pair := QTerm.map2 pair pair_cong.
 Definition pi1 := QTerm.map pi1 pi1_cong.
@@ -101,9 +103,8 @@ Ltac quotient_map_eq_simpl :=
   repeat (rewrite ?QTerm.map2_eq, ?QTerm.map_eq);
   apply QTerm.sound.
 
-
-Theorem lift_lam : forall (s1 s2 : string) (t : QTerm),
-    lift s1 (lam s2 t) = lam s2 (lift s1 t).
+Theorem lift_lam : forall (s1 s2 : string) (i : nat) (t : QTerm),
+      lift s1 i (lam s2 t) = lam s2 (lift s1 (if eqb s1 s2 then S i else i) t).
 Proof.
   (*
   intros.
@@ -122,8 +123,7 @@ Proof.
   apply lift_lam.
 Qed.
 
-Theorem lift_app : forall (s : string) (t1 t2 : QTerm),
-    lift s (app t1 t2) = app (lift s t1) (lift s t2).
+Theorem lift_app : forall s i t1 t2, lift s i (app t1 t2) = app (lift s i t1) (lift s i t2).
 Proof.
   intros.
   unfold lift, app.
@@ -136,12 +136,9 @@ Lemma if_commute {A B : Type} (f : A -> B) (b : bool) (x y : A)
 Proof.
   destruct b; reflexivity.
 Qed.
-    
-Theorem lift_var : forall (s1 s2 : string) (i : nat),
-    lift s1 (var s2 i) =
-      if String.eqb s1 s2
-      then var s2 (S i)
-      else var s2 i.
+
+Theorem lift_var : forall (s1 s2 : string) (i k : nat),
+    lift s1 k (var s2 i) = (if andb (s1 =? s2)%string (negb (Nat.ltb i k)) then var s2 (S i) else var s2 i).
 Proof.
   intros.
   unfold lift, var.
@@ -160,10 +157,10 @@ Proof.
 Qed.
 
 Theorem subst_lam : forall (s1 s2 : string) (i : nat) (t1 t2 : QTerm),
-    subst s2 i t2 (lam s1 t1) =
-      if String.eqb s1 s2
-      then lam s1 (subst s2 (S i) (lift s1 t2) t1)
-      else lam s1 (subst s2 i (lift s1 t2) t1).
+      subst s2 i t2 (lam s1 t1) =
+        (if (s1 =? s2)%string
+         then lam s1 (subst s2 (S i) (lift s1 0 t2) t1)
+         else lam s1 (subst s2 i (lift s1 0 t2) t1)).
 Proof.
   intros.
   unfold subst, lam, lift.
@@ -223,7 +220,7 @@ Proof.
   apply betapi2.
 Qed.
 
-Theorem eta : forall s t, t = (lam s (app (lift s t) (var s 0))).
+Theorem eta : forall s t, t = (lam s (app (lift s 0 t) (var s 0))).
 Proof.
   intros.
   unfold lam, app, lift, var.
@@ -231,7 +228,7 @@ Proof.
   apply eta.
 Qed.
 
-Theorem lift_internal_const : forall s c, lift s (QTerm.mk (term.const c)) = QTerm.mk (term.const c).
+Theorem lift_internal_const : forall s i c, lift s i (QTerm.mk (term.const c)) = QTerm.mk (term.const c).
 Proof.
   intros.
   unfold lift, const.
@@ -239,7 +236,7 @@ Proof.
   apply lift_const.
 Qed.
 
-Theorem lift_const : forall s1 s2, lift s1 (const s2) = const s2.
+Theorem lift_const : forall s1 s2 i, lift s1 i (const s2) = const s2.
 Proof.
   intros.
   apply lift_internal_const.
@@ -280,8 +277,8 @@ Proof.
   reflexivity.
 Qed.
 
-Theorem lift_pair : forall s t1 t2,
-    lift s (pair t1 t2) = pair (lift s t1) (lift s t2).
+Theorem lift_pair : forall s i t1 t2,
+    lift s i (pair t1 t2) = pair (lift s i t1) (lift s i t2).
 Proof.
   intros.
   repeat rewrite pair_def.
@@ -298,7 +295,7 @@ Proof.
   apply subst_id.
 Qed.
 
-Theorem subst_lift : forall s t1 t2, subst s 0 t1 (lift s t2) = t2.
+Theorem subst_lift : forall s i t1 t2, subst s i t1 (lift s i t2) = t2.
 Proof.
   intros.
   unfold subst, lift.
@@ -363,7 +360,7 @@ Notation "t1 [ s / t2 ]" := (subst s 0 t2 t1) (in custom term_term at level 40,
                                                   t1 custom term_term,
                                                   t2 custom term_term,
                                                   s custom term_name) : term_scope.
-Notation "t1 [ s ]" := (lift s t1) (in custom term_term at level 40,
+Notation "t1 [ s ]" := (lift s 0 t1) (in custom term_term at level 40,
                                        t1 custom term_term,
                                        s custom term_name) : term_scope.
 Notation "t1 , t2" := (pair t1 t2) (in custom term_term at level 30,
@@ -389,7 +386,7 @@ Notation "'fun' x => t" := (lam x t) (at level 200, right associativity,  only p
 (* For some mystery reason, the subtitution notation defined above already works for printing.
 Even though none of the other notations (all defined above in the same way) work for printing.
 But in other files, it doesn't work, so I need these.*)
-Notation "t [ s ]" := (lift s t) (at level 300, only printing).
+Notation "t [ s ]" := (lift s 0 t) (at level 300, only printing).
 Notation "t1 [ s / t2 ]" := (subst s 0 t2 t1) (at level 300, only printing).
 Notation "( t1 , t2 )" := (pair t1 t2) (at level 30, only printing).
 

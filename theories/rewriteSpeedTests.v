@@ -50,7 +50,7 @@ Ltac normalize5 := repeat (rewrite beta; repeat (repeat (rewrite subst_app) ;
 Ltac normalize6 := repeat (rewrite beta; repeat (try rewrite subst_app ;
                           try (rewrite subst_lam ; simpl) ;
                           try (rewrite subst_var ; simpl;
-                                  repeat (rewrite lift_lam, lift_app, lift_var)))
+                                  repeat (rewrite lift_lam, lift_app, lift_var; simpl)))
                           ).
 
 
@@ -94,12 +94,36 @@ Notation "'fact1'" := <fun f => fun n => n zero (fun m => suc (f m))> : .
 Notation "'fact'" := <Y fact1>.
 *)
 
+(* This one works with new version of lift. It is a bit slower than before though, so maybe I should
+go back in git history and see what happened. *)
+Ltac normalize7 := repeat (rewrite beta; repeat (try rewrite subst_app ;
+                          try (rewrite subst_lam ; simpl) ;
+                          try (rewrite subst_var ; simpl;
+                               repeat (try (rewrite lift_lam ; simpl) ; try rewrite lift_app ;
+                                       try (rewrite lift_var; simpl))))).
 
+
+Parameter subst_lam : forall (s1 s2 : string) (i : nat) (t1 t2 : QTerm),
+      subst s2 i t2 (lam s1 t1) =
+        (if (s1 =? s2)%string
+         then lam s1 (subst s2 (S i) (lift s1 0 t2) t1)
+         else lam s1 (subst s2 i (lift s1 0 t2) t1)).
+
+(* Maybe by rewriting this axiom in a way where the if can be deferred it might make the rewrites faster? *)
+Axiom subst_lam2 : forall (s1 s2 : string) (i : nat) (t1 t2 : QTerm),
+    subst s2 i t2 (lam s1 t1) =
+      lam s1 (subst s2 (if eqb s1 s2 then S i else i) (lift s1 0 t2) t1).
 
 Theorem speed_test2 : <`fact `zero> = zero.
 Proof.
   unfold fact, zero, fact', zero, Y.
-  Time normalize6.
+  Time repeat (rewrite beta; repeat (try rewrite subst_app ;
+                          try (rewrite subst_lam2 ; simpl) ;
+                          try (rewrite subst_var ; simpl) ;
+                               repeat (try (rewrite lift_lam ; simpl) ; try rewrite lift_app ;
+                                       try (rewrite lift_var ; simpl)); simpl)).
+  
+  Time normalize7.
 
   (*
   Time (
@@ -160,7 +184,10 @@ Proof.
   unfold suc.
   unfold Y.
 
-  Time normalize5.
+
+  (* There was an old version where this took 5 seconds. Not it takes almost 50, so I should go back and
+     see whats different.*)
+  Time normalize7.
   reflexivity.
   Time Qed.
 
