@@ -68,7 +68,7 @@ Proof.
     apply eq_sym.
     apply e.
     reflexivity.
-  }.
+  }
   rewrite H0 in eq.
   simpl in eq.
   assert (forall s, (eqb s s) = true).
@@ -80,7 +80,7 @@ Proof.
   exfalso.
   apply n0.
   reflexivity.
-  }.
+  }
   rewrite H1 in eq.
   simpl in eq.
   normalize eq.
@@ -93,3 +93,22 @@ Proof.
 Qed.
 
  
+Theorem pairInj : forall t1 t2 t1' t2', <`t1, `t2> = <`t1', `t2'> -> t1 = t1' /\ t2 = t2'.
+Proof.
+  intros.
+  split.
+  assert (<pi1 (`t1, `t2)> = <pi1 (`t1', `t2')>).
+  {
+    rewrite H.
+    reflexivity.
+  }
+  repeat rewrite betapi1 in H0.
+  assumption.
+  assert (<pi2 (`t1, `t2)> = <pi2 (`t1', `t2')>).
+  {
+    rewrite H.
+    reflexivity.
+  }
+  repeat rewrite betapi2 in H0.
+  assumption.
+Qed.

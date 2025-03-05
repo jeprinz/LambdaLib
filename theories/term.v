@@ -54,6 +54,8 @@ Inductive convertible : Term -> Term -> Prop :=
 (* small step substitution and lifting *)
 | lift_app : forall s t1 t2, convertible (lift s (app t1 t2)) (app (lift s t1) (lift s t2))
 | lift_lam : forall s1 s2 t, convertible (lift s1 (lam s2 t)) (lam s2 (lift s1 t))
+(* TODO: Surely this is wrong? Shouldn't it compare the two indices? In fact, shouldn't 
+lift TAKE an index? Check Nipkow paper. *)
 | lift_var : forall (s1 s2 : string) (i : nat),
     convertible (lift s1 (var s2 i))
       (if String.eqb s1 s2
