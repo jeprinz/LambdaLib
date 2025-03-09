@@ -54,10 +54,12 @@ Module Type LambdaSpec.
   Parameter betapi2 : forall t1 t2, pi2 (pair t1 t2) = t2.
   Parameter eta : forall (s : string) (t : QTerm), t = lam s (app (lift s 0 t) (var s 0)).
   Parameter alpha : forall (s1 s2 : string) (t : QTerm),
-      lam s1 t = lam s2 (subst s1 0 (var s2 0) t).
+      lam s1 t = lam s2 (subst s1 0 (var s2 0) (lift s2 0 t)).
 
   Parameter subst_id : forall s i t, subst s i (var s i) t = t.
   Parameter subst_lift : forall s i t1 t2, subst s i t1 (lift s i t2) = t2.
+  Parameter lift_lift : forall s1 s2 i1 i2 t,
+    lift s1 i1 (lift s2 i2 t) = lift s2 (if eqb s1 s2 then S i2 else i2) (lift s1 i1 t).
   Parameter consistency : exists (t1 t2 : QTerm), not (t1 = t2).
 End LambdaSpec.
 
@@ -188,10 +190,10 @@ Proof.
 Qed.
 
 Theorem alpha : forall (s1 s2 : string) (t : QTerm),
-    lam s1 t = lam s2 (subst s1 0 (var s2 0) t).
+    lam s1 t = lam s2 (subst s1 0 (var s2 0) (lift s2 0 t)).
 Proof.
   intros.
-  unfold lam, subst, var.
+  unfold lam, subst, var, lift.
   quotient_map_eq_simpl.
   apply alpha.
 Qed.
@@ -301,6 +303,14 @@ Proof.
   unfold subst, lift.
   quotient_map_eq_simpl.
   apply subst_lift.
+Qed.
+
+Theorem lift_lift : forall s1 s2 i1 i2 t,
+    lift s1 i1 (lift s2 i2 t) = lift s2 (if eqb s1 s2 then S i2 else i2) (lift s1 i1 t).
+  intros.
+  unfold lift.
+  quotient_map_eq_simpl.
+  apply lift_lift.
 Qed.
 
 Theorem consistency : exists (t1 t2 : QTerm), not (t1 = t2).

@@ -33,7 +33,7 @@ Definition pi2 t := app (const pi2c) t.
 Definition constant (s : string) : Term := const (stringc s).
 
 Inductive convertible : Term -> Term -> Prop :=
-| alpha : forall s1 s2 t, convertible (lam s1 t) (lam s2 (subst s1 0 (var s2 0) t))
+| alpha : forall s1 s2 t, convertible (lam s1 t) (lam s2 (subst s1 0 (var s2 0) (lift s2 0 t)))
 | beta : forall {s t1 t2}, convertible (app (lam s t1) t2) (subst s 0 t2 t1)
 | betapi1 : forall {t1 t2}, convertible (pi1 (pair t1 t2)) t1
 | betapi2 : forall {t1 t2}, convertible (pi2 (pair t1 t2)) t2
@@ -77,6 +77,9 @@ lift TAKE an index? Check Nipkow paper. *)
 (* extra facts *)
 | subst_id : forall s i t, convertible (subst s i (var s i) t) t
 | subst_lift : forall s i t1 t2, convertible (subst s i t1 (lift s i t2)) t2
+| lift_lift : forall s1 s2 i1 i2 t,
+    convertible (lift s1 i1 (lift s2 i2 t))
+                (lift s2 (if eqb s1 s2 then S i2 else i2) (lift s1 i1 t))
 (*| subst_subst : forall s1 i1 t1 s2 i2 t2 t,
     convertible (subst s1 i1 t1 (subst s2 i2 t2 t)) (subst s2 ????*)
 (* lift_lift ???*)                                           
