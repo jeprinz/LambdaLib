@@ -29,11 +29,21 @@ Ltac normalize := repeat (rewrite ?beta, ?betapi1, ?betapi2; compute_subst).
 [ ] - port to this version
 *)
 
+Ltac compute_subst' location :=
+  match location with
+  | "goal"%string => idtac "here1"
+  | _ => idtac "here2"
+  end.
+
+Theorem test : nat.
+Proof.
+  compute_subst' "goal"%string.
+
 Check alpha.
 Ltac proveNeutral := constructor ; repeat constructor.
 
 Ltac lambda_solve :=
-  (*repeat ( *)
+  repeat (
       match goal with
       | H : lam ?s ?t1 = lam ?s ?t2 |- _ => apply lamInj in H
       | |- lam ?s ?t1 = lam ?s ?t2 => apply (f_equal (lam s))
@@ -43,19 +53,26 @@ Ltac lambda_solve :=
       | H : @eq string ?s ?s |- _ => clear H
       | H : @eq string ?s1 ?s2 |- _ => inversion H
       | H : @eq QTerm (pair ?t1 ?t2) (pair ?t1' ?t2') |- _ => apply pairInj in H; destruct H
+      (* Beta reduction cases *)
+      | H : app (lam ?s ?t1) ?t2 = ?t3 |- _ => rewrite beta in H; compute_subst_in H
+      | H : ?t1 = app (lam ?s ?t2) ?t3 |- _ => rewrite beta in H; compute_subst_in H
+      | |- app (lam ?s ?t1) ?t2 = ?t3 => rewrite beta; compute_subst
+      | |- ?t1 = app (lam ?s ?t2) ?t3 => rewrite beta; compute_subst
+      (* pi-beta reduction cases *)
+      (* x = t2, should subst x. TODO: need case for t1 = x *)
       | H : @eq QTerm ?t1 ?t2 |- _ => subst t1
       end
-    (*)*)
+    )
 .
 
 Theorem test_lambda_solve_0
         (t : QTerm)
   : <fun x => `t> = <fun y => `t>.
 Proof.
-  repeat lambda_solve.
+  lambda_solve.
 Abort. (* This shouldn't be true, because t could have x or y in it. *)
 
-(* We need to hide Mark in a module *)
+(* We need to hide Mark in a module so that it is not definitionally equal to its definition *)
 Module Type HowToHideMark.
   Parameter Mark : forall {X : Type}, X -> X. (* He hides in here where no one can see him *)
   Parameter MarkIsJustId : forall {X : Type} {x : X}, Mark x = x.
@@ -104,42 +121,27 @@ Theorem test_lambda_solve_1
   : <fun x => `t [x]> = <fun y => `t [y]>.
 Proof.
   repeat lambda_solve.
-  (* In order to be able to cancel out lifts and substitutions in general, I will need
-   simultaneous lifts and substitutions. There is not a solution where we commute the subs
-   and lifts past each other, because that isn't always possible.
-   If I make the assumption that we only have lifts around metavariables, and that metavariables
-   are always in the empty context, then I think I can get away with only having simultaneous
-   lifts but not substitutions. *)
-  (*
-    One possible solution: write a tactic which repeatedly raised lift x through other lifts,
-    and a tactic which searches for a subst around a lift and returns the x from the subst
-    so that it can know which thing to looks for.
-    A problem is how this would work with multiple lifts of the same name but different
-    debruin indices.
-    Note that you can just match on expressions however you want in LTac:
-    https://softwarefoundations.cis.upenn.edu/plf-current/LibTactics.html
-   *)
   fix_subst_lifts.
-  Check subst_lift.
-  Check alpha.
-  rewrite lift_lift. simpl.
-  rewrite subst_lift.
   reflexivity.
 Qed.
-  
 
 Theorem test_lambda_solve
         (t1 t2 : QTerm)
         (H1 : <fun x => `t1 [x]> = <fun x => `t2 [x]>)
-  : <fun x => `t1[x]> = <fun y => `t2[x]>.
+  : <fun x => `t1[x]> = <fun y => `t2[y]>.
 Proof.
   repeat lambda_solve.
-  rewrite H0.
-  Check subst_lift.
-  rewrite subst_lift.
-  (* Some axiom is wrong. *)
-  
+  fix_subst_lifts.
+  apply liftInj in H1.
+  rewrite H1.
+  reflexivity.
+Qed.
 
-  
-  
-
+Theorem test_lambda_solve_2
+        (t : QTerm)
+        (H : <(fun x => x) `t> = < (fun x => x) (fun x => x)>)
+        : <`t `t> = <`t>.
+Proof.
+  lambda_solve.
+  reflexivity.
+Qed.

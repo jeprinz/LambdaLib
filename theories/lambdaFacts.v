@@ -112,3 +112,18 @@ Proof.
   repeat rewrite betapi2 in H0.
   assumption.
 Qed.
+
+Theorem liftInj : forall s i t1 t2, lift s i t1 = lift s i t2 -> t1 = t2.
+Proof.
+  intros.
+  pose (lift s i t1) as l.
+  pose (lift s i t2) as r.
+  assert (subst s i <dummy> l = subst s i <dummy> r).
+  unfold l, r.
+  rewrite H.
+  reflexivity.
+  unfold l, r in H0.
+  normalize H0.
+  repeat rewrite subst_lift in H0.
+  assumption.
+Qed.
