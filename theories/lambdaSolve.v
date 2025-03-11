@@ -1,5 +1,5 @@
 Require Import String.
-Require Import qterm.
+Require Import -(coercions) qterm. (* TODO: Do I ever need the coeercion? This is very strange*)
 Require Import lambdaFacts.
 
 (*
@@ -27,7 +27,7 @@ Ltac compute_lifts_in H := repeat (try (rewrite lift_lam in H ; simpl in H) ;
                               try rewrite lift_app in H;
                               try (rewrite lift_var in H ; simpl in H)).
 
-Ltac compute_subst_in H := repeat (try rewrite subst_app ;
+Ltac compute_subst_in H := repeat (try rewrite subst_app in H;
                           try (rewrite subst_lam in H ; simpl in H ; compute_lifts_in H) ;
                           try (rewrite subst_var in H; simpl in H);
                                   compute_lifts_in H).
@@ -164,6 +164,14 @@ Ltac fix_subst_lifts :=
   (* When we are done, remove Mark *)
   repeat rewrite MarkIsJustId.
 
+Ltac fix_subst_lifts_in H :=
+  repeat (
+      repeat rewrite subst_lift in H;
+      repeat rewrite mark_stuck in H;
+      repeat (rewrite swap_marked_lift in H ; simpl in H)
+    );
+  repeat rewrite MarkIsJustId in H.
+
 
 Theorem test_lambda_solve_1
         (t : QTerm)
@@ -213,4 +221,116 @@ Proof.
   lambda_solve.
 Qed.
 
+Theorem test_deeper_beta :
+  <a> = <(fun x => fun y => a) b c>.
+Proof.
+  (* Should beta here! *)
+Admitted.
 
+(*https://coq-club.inria.narkive.com/cZ5X8JAw/making-tactic-that-return-a-value*)
+
+Ltac print x := idtac x.
+
+Ltac get_sub_to_make_anything term toBeMade nameRet indexRet subRet :=
+  lazymatch term with
+  | (var ?s ?i) => pose toBeMade as subRet; pose s as nameRet; pose i as indexRet
+  | (app ?a ?b) => get_sub_to_make_anything a (lam "x" (lift "x" 0 toBeMade)) nameRet indexRet subRet
+  end.
+
+Ltac solve_neutral_unequal_case :=
+  match goal with
+  | H : @eq QTerm ?l ?r |- _ =>
+      let t1 := fresh "t1" in
+      let t2 := fresh "t2" in
+      let H2 := fresh "H" in
+      destruct consistency as [t1 temp]; destruct temp as [t2 H2];
+      let sub1 := fresh "sub1" in
+      let sub2 := fresh "sub2" in
+      let s1 := fresh "s1" in
+      let s2 := fresh "s2" in
+      let i1 := fresh "i1" in
+      let i2 := fresh "i2" in
+      get_sub_to_make_anything r t2 s2 i2 sub2;
+      get_sub_to_make_anything l (lift s2 i2 t1) s1 i1 sub1;
+      exfalso;
+      apply H2;
+      let fact := fresh "fact" in
+      assert (subst s2 i2 sub2 (subst s1 i1 sub1 l) = subst s2 i2 sub2 (subst s1 i1 sub1 r)) as fact;
+      repeat unfold s1, s2, i1, i2, sub1, sub2 in *;
+      [
+        rewrite H;
+        reflexivity
+      |
+        normalize_in fact;
+        repeat fix_subst_lifts_in fact;
+        apply fact
+      ]
+  end.
+
+(*Compute (ltac:(get_sub_to_make_anything <a> <b>)).*)
+
+Theorem test_unequal_neutrals
+  (H : <a b> = <c>)
+    : False.
+Proof.
+  solve_neutral_unequal_case.
+  (*destruct consistency as [t1 temp]. destruct temp as [t2 H2].
+  exfalso.
+  apply H2.
+
+
+  assert (<(a b) [a / fun x => `t1 [c] [x]] [c / `t2]>
+          = <c [a / fun x => `t1 [c] [x]] [c / `t2]>).
+
+  rewrite H.
+  reflexivity.
+  normalize_in H1.
+  repeat fix_subst_lifts_in H1.
+  apply H1.
+   *)
+Qed.
+
+Theorem test_shadowed_application
+        (t : QTerm) :
+  <(fun x => (fun x => `t [a] [x]) [x]) a b> = <`t [a]>.
+Proof.
+  normalize.
+  fix_subst_lifts.
+  reflexivity.
+Qed.
+
+Theorem test_unequal_neutrals_3
+        (H : <a b c> = <d>)
+  : False.
+   match goal with
+  | H : @eq QTerm ?l ?r |- _ =>
+      let t1 := fresh "t1" in
+      let t2 := fresh "t2" in
+      let H2 := fresh "H" in
+      destruct consistency as [t1 temp]; destruct temp as [t2 H2];
+      let sub1 := fresh "sub1" in
+      let sub2 := fresh "sub2" in
+      let s1 := fresh "s1" in
+      let s2 := fresh "s2" in
+      let i1 := fresh "i1" in
+      let i2 := fresh "i2" in
+      get_sub_to_make_anything r t2 s2 i2 sub2;
+      get_sub_to_make_anything l (lift s2 i2 t1) s1 i1 sub1;
+      exfalso;
+      apply H2;
+      assert (subst s2 i2 sub2 (subst s1 i1 sub1 l) = subst s2 i2 sub2 (subst s1 i1 sub1 r)) as fact
+   end.
+   unfold i1, i2, s1, s2, sub1, sub2.
+   rewrite H.
+   reflexivity.
+   repeat unfold i1, i2, s1, s2, sub1, sub2 in *.
+   compute_lifts_in fact.
+   normalize_in fact.
+   Check lift_lift.
+   Unset Printing Notations.
+   fix_subst_lifts_in fact.
+   repeat fix_subst_lifts_in fact.
+   (* Here is seems like I have some debruin index issue - the subst and lift would cancel if they
+    had the same index. Not sure if the issue is in the axioms or the tactic. *)
+
+   

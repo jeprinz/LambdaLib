@@ -76,6 +76,8 @@ Inductive In : QTerm -> QTerm -> Prop :=
     (forall a, In a A -> In <`f `a> B)
     -> In f <Pi `A `B>
 .
+(* TODO: should I encode PI as <Pi A B> or <Pi , A , B>?*)
+
 
 Inductive InCtx : QTerm -> QTerm -> Prop :=
 | in_nil : InCtx <nil> <nil>

@@ -418,11 +418,11 @@ Notation "t1 [ s @ i / t2 ]" := (subst s i t2 t1) (at level 40).
 Notation "t1 [ s / t2 ]" := (subst s 0 t2 t1) (at level 40, s at level 10).
 Notation "t1 [ s ]" := (lift s t1) (at level 40).
 *)
-
+(*
 Definition var_coerce (s : string) := var s 0.
 Coercion var_coerce : string >-> QTerm.
 Arguments var_coerce _%_string.
-
+*)
 
 Check beta.
 Check eta.
