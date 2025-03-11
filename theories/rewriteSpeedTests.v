@@ -1,5 +1,6 @@
 Require Import String.
 Require Import qterm.
+Require Import lambdaSolve.
 
 Compute <fun x => x>.
 Compute <fun y => fun z => y (fun x => x y)>.
@@ -61,7 +62,8 @@ Proof.
   normalize5.
   reflexivity.
 Qed.
-  
+
+(*
 Theorem test_things : <(fun x => x) (fun y => y)> = <fun x => x>.
 Proof.
   normalize.
@@ -70,10 +72,11 @@ Proof.
   normalize.
   reflexivity.
 Qed.
-
+*)
 Theorem speed_test : <(fun f => f (f (f (f (f (f (f (f (f (f (f (f result)))))))))))) (fun x => x)>
                                 = <result>.
 Proof.
+  (*Time lambda_solve.*)
   Time normalize6.
   (*Time ben_norm2.*)
   reflexivity.
@@ -117,13 +120,53 @@ Axiom subst_lam2 : forall (s1 s2 : string) (i : nat) (t1 t2 : QTerm),
 Theorem speed_test2 : <`fact `zero> = zero.
 Proof.
   unfold fact, zero, fact', zero, Y.
+  (* TODO: this version is much faster. I should incorporate that into lambda_solve.*)
+  Print lambda_solve.
+  repeat match goal with
+      | H : lam ?s ?t1 = lam ?s ?t2 |- _ => apply lamInj in H
+      | |- lam ?s ?t1 = lam ?s ?t2 => apply (f_equal (lam s))
+      | H : lam ?s1 ?t1 = lam ?s2 ?t2 |- _ => rewrite (@alpha s1 s2 t1) in H; compute_subst_in H
+      | |- lam ?s1 ?t1 = lam ?s2 ?t2 => rewrite (@alpha s1 s2 t1); compute_subst
+      | H : var ?s1 0 = var ?s2 0 |- _ => apply varInj in H
+      | H : @eq string ?s ?s |- _ => clear H
+      | H : @eq string ?s1 ?s2 |- _ => inversion H
+      | H : @eq QTerm (pair ?t1 ?t2) (pair ?t1' ?t2') |- _ => apply pairInj in H; destruct H
+      (* Beta reduction cases *)
+      | H : app (lam ?s ?t1) ?t2 = ?t3 |- _ => rewrite beta in H; compute_subst_in H
+      | H : ?t1 = app (lam ?s ?t2) ?t3 |- _ => rewrite beta in H; compute_subst_in H
+      | |- app (lam ?s ?t1) ?t2 = ?t3 => rewrite beta; compute_subst
+      | |- ?t1 = app (lam ?s ?t2) ?t3 => rewrite beta; compute_subst
+      (* pi-beta reduction cases *)
+      | H : pi1 (pair ?t1 ?t2) = ?t3 |- _ => rewrite betapi1 in H
+      | H : ?t1 = pi1 (pair ?t2 ?t3) |- _ => rewrite betapi1 in H
+      | |- pi1 (pair ?t1 ?t2) = ?t3 => rewrite betapi1
+      | |- ?t1 = pi1 (pair ?t2 ?t3) => rewrite betapi1
+      | H : pi2 (pair ?t1 ?t2) = ?t3 |- _ => rewrite betapi2 in H
+      | H : ?t1 = pi2 (pair ?t2 ?t3) |- _ => rewrite betapi2 in H
+      | |- pi2 (pair ?t1 ?t2) = ?t3 => rewrite betapi2
+      | |- ?t1 = pi2 (pair ?t2 ?t3) => rewrite betapi2
+      (* x = t2, should subst x. TODO: need case for t1 = x *)
+      | H : @eq QTerm ?t1 ?t2 |- _ => first [subst t1 | subst t2
+                                            | rewrite beta in H ; compute_subst_in H ]
+      (* If we are trying to prove an equality involving functions that are not in QTerm,
+         try just f_equaling them. Hopefully the user wanted that since its the goal where
+         they ran this tactic. *)
+      | |- @eq ?ty ?a ?b => (lazymatch ty with (* lazymatch is needed to make it actually fail *)
+                             | QTerm => fail
+                             | _ => try reflexivity; apply proveEqualityInParts
+                             end)
+      | |- @eq QTerm ?t1 ?t2 => rewrite beta in H ; compute_subst
+         end.
+  lambda_solve.
+  Time normalize7.
   Time repeat (rewrite beta; repeat (try rewrite subst_app ;
                           try (rewrite subst_lam2 ; simpl) ;
                           try (rewrite subst_var ; simpl) ;
                                repeat (try (rewrite lift_lam ; simpl) ; try rewrite lift_app ;
                                        try (rewrite lift_var ; simpl)); simpl)).
+  Time lambda_solve.
   
-  Time normalize7.
+  Time normalize6.
 
   (*
   Time (

@@ -44,8 +44,10 @@ Module Type LambdaSpec.
          else lam s1 (subst s2 i (lift s1 0 t2) t1)).
   Parameter subst_app : forall (s : string) (i : nat) (t1 t2 t3 : QTerm),
       subst s i t3 (app t1 t2) = app (subst s i t3 t1) (subst s i t3 t2).
-  Parameter subst_var : forall (x y : string) (n i : nat) (toSub : QTerm),
-      subst x i toSub (var y n) = (if ((y =? x)%string && Nat.eqb n i)%bool then toSub else var y n).
+  Parameter subst_var : forall s1 s2 k i toSub, subst s1 k toSub (var s2 i) =
+     if String.eqb s1 s2
+        then if Nat.ltb k i then var s2 (i - 1) else if Nat.eqb i k then toSub
+        else var s2 i else var s2 i.
   Parameter subst_const : forall s1 s2 i t, subst s1 i t (const s2) = const s2.
   Parameter subst_pair : forall s i t t1 t2,
       subst s i t (pair t1 t2) = pair (subst s i t t1) (subst s i t t2).
@@ -176,15 +178,16 @@ Proof.
   apply subst_lam.
 Qed.
 
-Theorem subst_var : forall x y n i toSub,
-    subst x i toSub (var y n) =
-    if andb (String.eqb y x) (Nat.eqb n i) then toSub else var y n.
+Theorem subst_var : forall s1 s2 k i toSub, subst s1 k toSub (var s2 i) =
+     if String.eqb s1 s2
+        then if Nat.ltb k i then var s2 (i - 1) else if Nat.eqb i k then toSub
+        else var s2 i else var s2 i.
 Proof.
   intros.
   unfold subst, var.
   generalize_ind_QTerm.
   repeat (rewrite ?QTerm.map2_eq, ?QTerm.map_eq).
-  rewrite if_commute.
+  repeat rewrite if_commute.
   apply QTerm.sound.
   apply subst_var.
 Qed.
@@ -376,9 +379,9 @@ Notation "t1 [ s ]" := (lift s 0 t1) (in custom term_term at level 40,
 Notation "t1 , t2" := (pair t1 t2) (in custom term_term at level 30,
                                        t1 custom term_term,
                                        t2 custom term_term) : term_scope.
-Notation "'pi1' t" := (pi1 t) (in custom term_term at level 35,
+Notation "'proj1' t" := (pi1 t) (in custom term_term at level 35,
                                   t custom term_term, only parsing) : term_scope.
-Notation "'pi2' t" := (pi2 t) (in custom term_term at level 35,
+Notation "'proj2' t" := (pi2 t) (in custom term_term at level 35,
                                   t custom term_term, only parsing) : term_scope.
 
 (* Unquote expression so you can refer to other QTerms in scope *)
@@ -386,6 +389,7 @@ Notation "` x" := x (in custom term_term at level 0, x global) : term_scope.
 Notation "` x" := x (in custom term_name at level 0, x global) : term_scope.
 
 Compute <fun y => fun z => y (fun x => x y)>.
+Compute <fun x => pi x>.
 
 (* It wont use those notations for printing. But maybe I should specify separate notations,
 only for printing? *)
@@ -399,9 +403,9 @@ But in other files, it doesn't work, so I need these.*)
 Notation "t [ s ]" := (lift s 0 t) (at level 300, only printing).
 Notation "t1 [ s / t2 ]" := (subst s 0 t2 t1) (at level 300, only printing).
 Notation "( t1 , t2 )" := (pair t1 t2) (at level 30, only printing).
-
-Notation "'pi1' t" := (Lambda.pi1 t) (at level 35, only printing).
-Notation "'pi2' t" := (Lambda.pi2 t) (at level 35, only printing).
+Check pi1.
+Notation "'proj1' t" := (Lambda.pi1 t) (at level 35, only printing).
+Notation "'proj1' t" := (Lambda.pi2 t) (at level 35, only printing).
 
 Compute <fun y => fun z => y (fun x => x y)>.
 Definition metavar_example: QTerm. exact <fun x => x>. Qed.
@@ -430,4 +434,3 @@ Maybe make a module? *)
 Compute <fun x => fun y => x y y>.
  
 Compute <pi2 (a , b)>.
-

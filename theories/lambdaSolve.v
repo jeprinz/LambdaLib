@@ -12,16 +12,27 @@ There should not be any lifts anywhere else or subst forms anywhere at all
 except during intermediate states.
 *)
 
+Ltac compute_lifts := repeat (try (rewrite lift_lam ; simpl) ;
+                              try rewrite lift_app;
+                              try (rewrite lift_var ; simpl)).
+
 Ltac compute_subst := repeat (try rewrite subst_app ;
-                          try (rewrite subst_lam ; simpl) ;
-                          try (rewrite subst_var ; simpl;
-                               repeat (rewrite lift_lam, lift_app, lift_var))).
+                              try rewrite subst_pair;
+                          try (rewrite subst_lam ; simpl ; compute_lifts) ;
+                          try (rewrite subst_var ; simpl);
+                               compute_lifts).
 (* Is there a way to not have this be repetetive with the above? *)
+
+Ltac compute_lifts_in H := repeat (try (rewrite lift_lam in H ; simpl in H) ;
+                              try rewrite lift_app in H;
+                              try (rewrite lift_var in H ; simpl in H)).
+
 Ltac compute_subst_in H := repeat (try rewrite subst_app ;
-                          try (rewrite subst_lam in H ; simpl in H) ;
-                          try (rewrite subst_var in H; simpl in H;
-                                  repeat (rewrite lift_lam, lift_app, lift_var in H))).
+                          try (rewrite subst_lam in H ; simpl in H ; compute_lifts_in H) ;
+                          try (rewrite subst_var in H; simpl in H);
+                                  compute_lifts_in H).
 Ltac normalize := repeat (rewrite ?beta, ?betapi1, ?betapi2; compute_subst).
+Ltac normalize_in H := repeat (rewrite ?beta, ?betapi1, ?betapi2 in H; compute_subst_in H).
 
 (*
 [x] - add pairs and stuff to qterm
@@ -29,18 +40,33 @@ Ltac normalize := repeat (rewrite ?beta, ?betapi1, ?betapi2; compute_subst).
 [ ] - port to this version
 *)
 
+(*
 Ltac compute_subst' location :=
   match location with
-  | "goal"%string => idtac "here1"
-  | _ => idtac "here2"
+  | "goal"%string => repeat (try rewrite subst_app ;
+                          try (rewrite subst_lam ; simpl) ;
+                          try (rewrite subst_var ; simpl;
+                               repeat (rewrite lift_lam, lift_app, lift_var)))
+  | _ => repeat (try rewrite subst_app ;
+                          try (rewrite subst_lam in location ; simpl in location) ;
+                          try (rewrite subst_var in location; simpl in location;
+                                  repeat (rewrite lift_lam, lift_app, lift_var in location)))
   end.
 
-Theorem test : nat.
-Proof.
-  compute_subst' "goal"%string.
 
-Check alpha.
-Ltac proveNeutral := constructor ; repeat constructor.
+Ltac handle_case t1 t2 location :=
+  match t1 t2 with
+  | (lam ?s ?t1) (lam ?s ?t2) => apply lamInj in location
+  end.
+ *)
+
+Theorem proveEqualityInParts (A B : Type) (f1 f2 : A -> B) (a1 a2 : A)
+  : f1 = f2 -> a1 = a2 -> f1 a1 = f2 a2.
+Proof.
+  intros.
+  rewrite H, H0.
+  reflexivity.
+Qed.
 
 Ltac lambda_solve :=
   repeat (
@@ -59,11 +85,34 @@ Ltac lambda_solve :=
       | |- app (lam ?s ?t1) ?t2 = ?t3 => rewrite beta; compute_subst
       | |- ?t1 = app (lam ?s ?t2) ?t3 => rewrite beta; compute_subst
       (* pi-beta reduction cases *)
+      | H : pi1 (pair ?t1 ?t2) = ?t3 |- _ => rewrite betapi1 in H
+      | H : ?t1 = pi1 (pair ?t2 ?t3) |- _ => rewrite betapi1 in H
+      | |- pi1 (pair ?t1 ?t2) = ?t3 => rewrite betapi1
+      | |- ?t1 = pi1 (pair ?t2 ?t3) => rewrite betapi1
+      | H : pi2 (pair ?t1 ?t2) = ?t3 |- _ => rewrite betapi2 in H
+      | H : ?t1 = pi2 (pair ?t2 ?t3) |- _ => rewrite betapi2 in H
+      | |- pi2 (pair ?t1 ?t2) = ?t3 => rewrite betapi2
+      | |- ?t1 = pi2 (pair ?t2 ?t3) => rewrite betapi2
       (* x = t2, should subst x. TODO: need case for t1 = x *)
-      | H : @eq QTerm ?t1 ?t2 |- _ => subst t1
+      | H : @eq QTerm ?t1 ?t2 |- _ => first [subst t1 | subst t2 ]
+      (* If we are trying to prove an equality involving functions that are not in QTerm,
+         try just f_equaling them. Hopefully the user wanted that since its the goal where
+         they ran this tactic. *)
+      | |- @eq ?ty ?a ?b => (lazymatch ty with (* lazymatch is needed to make it actually fail *)
+                             | QTerm => fail
+                             | _ => try reflexivity; apply proveEqualityInParts
+                             end)
+      | |- @eq QTerm ?a ?b => reflexivity
       end
     )
 .
+
+Theorem test_10
+        (a b : QTerm)
+  : <x `a> = <x `b>.
+Proof.
+  lambda_solve.
+Abort.
 
 Theorem test_lambda_solve_0
         (t : QTerm)
@@ -143,5 +192,25 @@ Theorem test_lambda_solve_2
         : <`t `t> = <`t>.
 Proof.
   lambda_solve.
-  reflexivity.
 Qed.
+
+Theorem test_lambda_solve_3
+        (t1 t2 : QTerm)
+        (P : QTerm -> Prop)
+        (H : t1 = t2)
+  : P t1 = P t2.
+Proof.
+  lambda_solve.
+Qed.
+
+Theorem test2 : <fun x => x> = <fun y => y>.
+Proof.
+  lambda_solve.
+Qed.
+
+Theorem test_shadowed_var : (lam "a" (var "a"%string 1)) = <fun x => a>.
+Proof.
+  lambda_solve.
+Qed.
+
+

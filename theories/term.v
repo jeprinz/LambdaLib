@@ -71,8 +71,10 @@ lift TAKE an index? Check Nipkow paper. *)
                 (if String.eqb s1 s2
                  then lam s1 (subst s2 (S i) (lift s1 0 t2) t1)
                  else lam s1 (subst s2 i (lift s1 0 t2) t1))
-| subst_var : forall x y n i toSub, convertible (subst x i toSub (var y n))
-    (if andb (String.eqb y x) (Nat.eqb n i) then toSub else var y n)
+| subst_var : forall s1 s2 k i toSub, convertible (subst s1 k toSub (var s2 i))
+     (if String.eqb s1 s2
+        then if Nat.ltb k i then var s2 (i - 1) else if Nat.eqb i k then toSub
+        else var s2 i else var s2 i)
 | subst_const : forall s1 s2 i t, convertible (subst s1 i t (const s2)) (const s2)
 (* extra facts *)
 | subst_id : forall s i t, convertible (subst s i (var s i) t) t

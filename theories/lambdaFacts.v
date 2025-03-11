@@ -84,12 +84,26 @@ Proof.
   rewrite H1 in eq.
   simpl in eq.
   normalize eq.
-  rewrite H1 in eq.
+  assert ((eqb s1 s2) = false).
+  {
+    pose (eqb_spec s1 s2) as fact.
+    destruct fact.
+    exfalso.
+    apply n.
+    apply eq_sym.
+    apply (eq_sym e).
+    reflexivity.
+  }
+  rewrite H2 in eq.
   simpl in eq.
   rewrite subst_lift in eq.
   exfalso.
   apply p.
+  rewrite subst_var in eq.
+  simpl in eq.
+  rewrite H1 in eq.
   apply eq.
+  (* TODO: This proof can be way shorter*)
 Qed.
 
  
@@ -97,14 +111,14 @@ Theorem pairInj : forall t1 t2 t1' t2', <`t1, `t2> = <`t1', `t2'> -> t1 = t1' /\
 Proof.
   intros.
   split.
-  assert (<pi1 (`t1, `t2)> = <pi1 (`t1', `t2')>).
+  assert (<proj1 (`t1, `t2)> = <proj1 (`t1', `t2')>).
   {
     rewrite H.
     reflexivity.
   }
   repeat rewrite betapi1 in H0.
   assumption.
-  assert (<pi2 (`t1, `t2)> = <pi2 (`t1', `t2')>).
+  assert (<proj2 (`t1, `t2)> = <proj2 (`t1', `t2')>).
   {
     rewrite H.
     reflexivity.
