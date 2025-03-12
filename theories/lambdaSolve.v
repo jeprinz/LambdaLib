@@ -18,6 +18,8 @@ Ltac compute_lifts := repeat (try (rewrite lift_lam ; simpl) ;
 
 Ltac compute_subst := repeat (try rewrite subst_app ;
                               try rewrite subst_pair;
+                              try rewrite subst_pi1;
+                              try rewrite subst_pi2;
                           try (rewrite subst_lam ; simpl ; compute_lifts) ;
                           try (rewrite subst_var ; simpl);
                                compute_lifts).
@@ -28,7 +30,9 @@ Ltac compute_lifts_in H := repeat (try (rewrite lift_lam in H ; simpl in H) ;
                               try (rewrite lift_var in H ; simpl in H)).
 
 Ltac compute_subst_in H := repeat (try rewrite subst_app in H;
-                          try rewrite subst_pair in H;
+                                   try rewrite subst_pair in H;
+                                   try rewrite subst_pi1 in H;
+                                   try rewrite subst_pi2 in H;
                           try (rewrite subst_lam in H ; simpl in H ; compute_lifts_in H) ;
                           try (rewrite subst_var in H; simpl in H);
                                   compute_lifts_in H).

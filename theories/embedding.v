@@ -14,7 +14,7 @@ For now, I'll just do type : type.
 (* The shallow embedding. Ideally this would work with nice notations, but for now Definitions: *)
 
 Definition nil := <Nil>.
-Definition cons := <fun gamma => fun ty => (gamma , ty)>.
+Definition cons := <fun gamma => fun ty => cons gamma ty>.
 
 Definition zero := <fun x => proj2 x>.
 Definition succ := <fun x => fun gamma => x (proj1 gamma)>.
@@ -99,12 +99,42 @@ Theorem fundamental_lemma_for_variables : forall ctx T t env,
     VarTyped ctx T t -> InCtx env ctx -> In <`t `env> <`T `env>.
 Proof.
   intros.
+  generalize env, H0.
+  clear H0.
+  clear env.
   induction H.
-  - inversion H0.
+  - intros.
+    inversion H0.
     + unfold cons in H2.
       normalize_in H2.
-      (* we need to be able to prove that nil != cons here, but with my representation that doesn' twork*)
-Admitted.      
+      unfold nil in H2.
+      solve_neutral_unequal_case.
+    +
+      unfold cons in H.
+      normalize_in H.
+      fix_subst_lifts_in H.
+      repeat neutral_inj_case.
+      unfold zero, weaken.
+      normalize. repeat fix_subst_lifts.
+      lambda_solve.
+      apply H3.
+  - intros.
+    inversion H0.
+    + unfold nil, cons in H3.
+      normalize_in H3.
+      fix_subst_lifts_in H3.
+      solve_neutral_unequal_case.
+    + unfold cons in H1.
+      normalize_in H1.
+      fix_subst_lifts_in H1.
+      repeat neutral_inj_case.
+      lambda_solve.
+      unfold weaken, succ.
+      normalize.
+      fix_subst_lifts.
+      apply IHVarTyped.
+      apply H2.
+Qed.
 
 (* Think about the proof informally first *)
 Theorem fundamental_lemma : forall ctx T t env,

@@ -36,7 +36,9 @@ Module Type LambdaSpec.
       lift s1 k (var s2 i) = (if andb (s1 =? s2)%string (negb (Nat.ltb i k)) then var s2 (S i) else var s2 i).
   Parameter lift_const : forall s1 s2 i , lift s1 i (const s2) = const s2.
   Parameter lift_pair : forall s i t1 t2, lift s i (pair t1 t2) = pair (lift s i t1) (lift s i t2).
-
+  Parameter lift_pi1 : forall s i t, lift s i (pi1 t) = pi1 (lift s i t).
+  Parameter lift_pi2 : forall s i t, lift s i (pi2 t) = pi2 (lift s i t).
+  
   Parameter subst_lam : forall (s1 s2 : string) (i : nat) (t1 t2 : QTerm),
       subst s2 i t2 (lam s1 t1) =
         (if (s1 =? s2)%string
@@ -51,6 +53,9 @@ Module Type LambdaSpec.
   Parameter subst_const : forall s1 s2 i t, subst s1 i t (const s2) = const s2.
   Parameter subst_pair : forall s i t t1 t2,
       subst s i t (pair t1 t2) = pair (subst s i t t1) (subst s i t t2).
+  Parameter subst_pi1 : forall s i t1 t2, subst s i t1 (pi1 t2) = pi1 (subst s i t1 t2).
+  Parameter subst_pi2 : forall s i t1 t2, subst s i t1 (pi2 t2) = pi2 (subst s i t1 t2).
+  
   Parameter beta : forall s t1 t2, app (lam s t1) t2 = subst s 0 t2 t1.
   Parameter betapi1 : forall t1 t2, pi1 (pair t1 t2) = t1.
   Parameter betapi2 : forall t1 t2, pi2 (pair t1 t2) = t2.
@@ -277,6 +282,24 @@ Proof.
   apply conv_refl.
 Qed.
 
+Lemma pi1_def : forall t,
+    pi1 t = app (QTerm.mk (term.const pi1c)) t.
+Proof.
+  intros.
+  unfold pi1, app, term.pi1.
+  quotient_map_eq_simpl.
+  apply conv_refl.
+Qed.
+
+Lemma pi2_def : forall t,
+    pi2 t = app (QTerm.mk (term.const pi2c)) t.
+Proof.
+  intros.
+  unfold pi2, app, term.pi2.
+  quotient_map_eq_simpl.
+  apply conv_refl.
+Qed.
+
 Theorem subst_pair : forall s i t t1 t2,
     subst s i t (pair t1 t2) = pair (subst s i t t1) (subst s i t t2).
 Proof.
@@ -287,11 +310,48 @@ Proof.
   reflexivity.
 Qed.
 
+Theorem subst_pi1 : forall s i t1 t2, subst s i t1 (pi1 t2) = pi1 (subst s i t1 t2).
+Proof.
+  intros.
+  repeat rewrite pi1_def.
+  repeat rewrite subst_app.
+  rewrite subst_internal_const.
+  reflexivity.
+Qed.
+
+Theorem subst_pi2 : forall s i t1 t2, subst s i t1 (pi2 t2) = pi2 (subst s i t1 t2).
+Proof.
+  intros.
+  repeat rewrite pi2_def.
+  repeat rewrite subst_app.
+  rewrite subst_internal_const.
+  reflexivity.
+Qed.
+
+
 Theorem lift_pair : forall s i t1 t2,
     lift s i (pair t1 t2) = pair (lift s i t1) (lift s i t2).
 Proof.
   intros.
   repeat rewrite pair_def.
+  repeat rewrite lift_app.
+  rewrite lift_internal_const.
+  reflexivity.
+Qed.
+
+Theorem lift_pi1 : forall s i t, lift s i (pi1 t) = pi1 (lift s i t).
+Proof.
+  intros.
+  repeat rewrite pi1_def.
+  repeat rewrite lift_app.
+  rewrite lift_internal_const.
+  reflexivity.
+Qed.
+
+Theorem lift_pi2 : forall s i t, lift s i (pi2 t) = pi2 (lift s i t).
+Proof.
+  intros.
+  repeat rewrite pi2_def.
   repeat rewrite lift_app.
   rewrite lift_internal_const.
   reflexivity.
