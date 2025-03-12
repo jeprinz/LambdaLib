@@ -79,9 +79,16 @@ lift TAKE an index? Check Nipkow paper. *)
 (* extra facts *)
 | subst_id : forall s i t, convertible (subst s i (var s i) t) t
 | subst_lift : forall s i t1 t2, convertible (subst s i t1 (lift s i t2)) t2
+(* Hopefully this is right now *)
 | lift_lift : forall s1 s2 i1 i2 t,
     convertible (lift s1 i1 (lift s2 i2 t))
-                (lift s2 (if eqb s1 s2 then S i2 else i2) (lift s1 i1 t))
+                (if eqb s1 s2
+                 then if Nat.ltb i2 i1
+                      then lift s2 i2 (lift s1 (pred i1) t)
+                      else lift s2 (S i2) (lift s1 i1 t)
+                 else lift s2 i2 (lift s1 i1 t))
+    (*convertible (lift s1 i1 (lift s2 i2 t))
+                (lift s2 (if eqb s1 s2 then S i2 else i2) (lift s1 i1 t))*)
 (*| subst_subst : forall s1 i1 t1 s2 i2 t2 t,
     convertible (subst s1 i1 t1 (subst s2 i2 t2 t)) (subst s2 ????*)
 (* lift_lift ???*)                                           

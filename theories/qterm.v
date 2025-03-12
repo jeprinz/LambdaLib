@@ -61,7 +61,12 @@ Module Type LambdaSpec.
   Parameter subst_id : forall s i t, subst s i (var s i) t = t.
   Parameter subst_lift : forall s i t1 t2, subst s i t1 (lift s i t2) = t2.
   Parameter lift_lift : forall s1 s2 i1 i2 t,
-    lift s1 i1 (lift s2 i2 t) = lift s2 (if eqb s1 s2 then S i2 else i2) (lift s1 i1 t).
+      lift s1 i1 (lift s2 i2 t) =
+                (if eqb s1 s2
+                 then if Nat.ltb i2 i1
+                      then lift s2 i2 (lift s1 (pred i1) t)
+                      else lift s2 (S i2) (lift s1 i1 t)
+                 else lift s2 i2 (lift s1 i1 t)).
   Parameter consistency : exists (t1 t2 : QTerm), not (t1 = t2).
 End LambdaSpec.
 
@@ -309,10 +314,18 @@ Proof.
 Qed.
 
 Theorem lift_lift : forall s1 s2 i1 i2 t,
-    lift s1 i1 (lift s2 i2 t) = lift s2 (if eqb s1 s2 then S i2 else i2) (lift s1 i1 t).
+      lift s1 i1 (lift s2 i2 t) =
+                (if eqb s1 s2
+                 then if Nat.ltb i2 i1
+                      then lift s2 i2 (lift s1 (pred i1) t)
+                      else lift s2 (S i2) (lift s1 i1 t)
+                 else lift s2 i2 (lift s1 i1 t)).
   intros.
   unfold lift.
-  quotient_map_eq_simpl.
+  generalize_ind_QTerm.
+  repeat (rewrite ?QTerm.map2_eq, ?QTerm.map_eq).
+  repeat rewrite if_commute.
+  apply QTerm.sound.
   apply lift_lift.
 Qed.
 

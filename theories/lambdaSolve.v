@@ -28,6 +28,7 @@ Ltac compute_lifts_in H := repeat (try (rewrite lift_lam in H ; simpl in H) ;
                               try (rewrite lift_var in H ; simpl in H)).
 
 Ltac compute_subst_in H := repeat (try rewrite subst_app in H;
+                          try rewrite subst_pair in H;
                           try (rewrite subst_lam in H ; simpl in H ; compute_lifts_in H) ;
                           try (rewrite subst_var in H; simpl in H);
                                   compute_lifts_in H).
@@ -145,8 +146,14 @@ Proof.
 Qed.
 
 Theorem swap_marked_lift : forall (s1 s2 : string) (i1 i2 : nat) (t : QTerm),
+(*    (Mark lift) s1 i1 (lift s2 i2 t) =
+      lift s2 (if (s1 =? s2)%string then S i2 else i2) ((Mark lift) s1 i1 t).*)
     (Mark lift) s1 i1 (lift s2 i2 t) =
-      lift s2 (if (s1 =? s2)%string then S i2 else i2) ((Mark lift) s1 i1 t).
+      (if eqb s1 s2
+       then if Nat.ltb i2 i1
+            then lift s2 i2 (Mark lift s1 (pred i1) t)
+            else lift s2 (S i2) (Mark lift s1 i1 t)
+       else lift s2 i2 (Mark lift s1 i1 t)).
 Proof.
   rewrite MarkIsJustId.
   apply lift_lift.
@@ -302,7 +309,10 @@ Qed.
 Theorem test_unequal_neutrals_3
         (H : <a b c> = <d>)
   : False.
-   match goal with
+Proof.
+  solve_neutral_unequal_case.
+  (*
+  match goal with
   | H : @eq QTerm ?l ?r |- _ =>
       let t1 := fresh "t1" in
       let t2 := fresh "t2" in
@@ -330,7 +340,45 @@ Theorem test_unequal_neutrals_3
    Unset Printing Notations.
    fix_subst_lifts_in fact.
    repeat fix_subst_lifts_in fact.
+   assumption.
    (* Here is seems like I have some debruin index issue - the subst and lift would cancel if they
     had the same index. Not sure if the issue is in the axioms or the tactic. *)
+   *)
+Qed.
 
-   
+Theorem test_unequal_neutral_another
+        (H : <a> = <b c d e>)
+  : False.
+Proof.
+  solve_neutral_unequal_case.
+Qed.
+
+(*
+For now this will be an axiom. I will have to think about what property of the underlying
+terms is needed to give this.
+ *)
+
+Inductive PseudoNeutral : QTerm -> Prop :=
+| pn_var : forall s i, PseudoNeutral (var s i)
+| pn_app : forall a b, PseudoNeutral a -> PseudoNeutral (app a b)
+.
+
+Axiom neutralInj : forall a b c d,
+    PseudoNeutral a -> PseudoNeutral c -> app a b = app c d -> a = c /\ b = d.
+
+Ltac neutral_inj_case :=
+  match goal with
+  | H : app ?a ?b = app ?c ?d |- _ =>
+      apply neutralInj in H;
+      repeat constructor;
+      destruct H
+  end.
+
+Theorem application_injective_test
+        (a b : QTerm)
+        (H : <c `a x> = <c `b x>)
+  : a = b.
+Proof.
+  repeat neutral_inj_case.
+  assumption.
+Qed.
