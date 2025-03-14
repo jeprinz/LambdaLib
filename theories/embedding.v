@@ -31,7 +31,7 @@ Definition app := <fun t1 => fun t2 => fun gamma => (t1 gamma) (t2 gamma)>.
 
 Definition weaken := <fun t => fun env => t (proj1 env)>.
 
-Ltac unfold_all := unfold nil, cons, zero, succ, pi, U, var_to_term, lambda, app, weaken, lzero, lsuc.
+Ltac unfold_all := unfold nil, cons, zero, succ, pi, U, Empty, var_to_term, lambda, app, weaken, lzero, lsuc in *.
 
 (* The deeper shallow embedding *)
 
@@ -53,19 +53,13 @@ Inductive Typed : QTerm -> QTerm -> QTerm -> Prop :=
 | ty_Empty : forall ctx lvl, Typed ctx <`U `lvl> Empty
 .
 
-Theorem cast {A B : Type} (a : A) (p : A = B) : B.
-Proof.
-  intros.
-  rewrite <- p.
-  assumption.
-Qed.
-
 (* The identity function is typed at U -> U*)
 Theorem test1 : Typed nil <`pi (`U `lzero) (`U `lzero)> <`lambda `zero>.
 Proof.
   apply ty_lambda.
   apply ty_var.
-  eapply (cast (ty_zero _ _)).
+  Check ty_zero.
+  apply_cast ty_zero.
   unfold_all.
   lambda_solve.
 Qed.
@@ -95,6 +89,9 @@ Inductive InCtx : QTerm -> QTerm -> Prop :=
     InCtx env ctx -> In val <`T `env> -> InCtx <`env , `val> <`cons `ctx `T> 
 .
 
+Ltac solve_all := repeat (unfold_all ; lambda_solve ; repeat neutral_inj_case ;lambda_solve
+                  ; repeat fast_neutral_unequal_case). 
+
 Theorem fundamental_lemma_for_variables : forall ctx T t env,
     VarTyped ctx T t -> InCtx env ctx -> In <`t `env> <`T `env>.
 Proof.
@@ -105,38 +102,18 @@ Proof.
   induction H.
   - intros.
     inversion H0.
-    + unfold cons in H2.
-      normalize_in H2.
-      unfold nil in H2.
-      solve_neutral_unequal_case.
+    + solve_all.
     +
-      unfold cons in H.
-      normalize_in H.
-      fix_subst_lifts_in H.
-      repeat neutral_inj_case.
-      unfold zero, weaken.
-      normalize. repeat fix_subst_lifts.
-      lambda_solve.
+      solve_all.
       apply H3.
   - intros.
     inversion H0.
-    + unfold nil, cons in H3.
-      normalize_in H3.
-      fix_subst_lifts_in H3.
-      solve_neutral_unequal_case.
-    + unfold cons in H1.
-      normalize_in H1.
-      fix_subst_lifts_in H1.
-      repeat neutral_inj_case.
-      lambda_solve.
-      unfold weaken, succ.
-      normalize.
-      fix_subst_lifts.
+    + solve_all.
+    + solve_all.
       apply IHVarTyped.
       apply H2.
 Qed.
 
-(* Think about the proof informally first *)
 Theorem fundamental_lemma : forall ctx T t env,
     Typed ctx T t -> InCtx env ctx -> In <`t `env> <`T `env>.
 Proof.
@@ -145,12 +122,12 @@ Proof.
   clear H0.
   clear env.
   induction H.
-  - intros. unfold pi. normalize. repeat fix_subst_lifts.
+  - intros. 
     eapply (cast (in_fun _ _ _ _)). unfold_all.
-    lambda_solve.
+    solve_all.
     Unshelve. (* This focuses the goal from the argument to in_fun *)
     intros.
-    normalize. repeat fix_subst_lifts.
+    lambda_solve.
     apply IHTyped.
     apply in_cons.
     apply H0.
@@ -160,71 +137,41 @@ Proof.
     pose (IHTyped2 env H1) as Ih2.
     inversion Ih1.
     (* Prove that it can't be in_U *)
-    unfold pi in H4.
-    Check eta.
-    normalize_in H4.
-    solve_neutral_unequal_case.
+    solve_all.
     (* Do the actual real proof for in_fun *)
-    unfold pi in H2.
-    normalize_in H2.
-    repeat fix_subst_lifts_in H2.
-    lambda_solve.
-    repeat neutral_inj_case.
-    lambda_solve.
-    normalize.
-    fix_subst_lifts.
+    solve_all.
     apply H4 in Ih2.
-    unfold app.
-    normalize.
-    repeat fix_subst_lifts.
-    
-    apply (cast Ih2).
-    lambda_solve.
-    fix_subst_lifts.
-    reflexivity.
+    solve_all.
+    apply_cast Ih2.
+    solve_all.
     (* prove that it can't be in_Pi *)
-    unfold pi in H3.
-    normalize_in H3.
-    solve_neutral_unequal_case.
+    solve_all.
     (* prove that it can't be in_Empty *)
-    unfold pi in H4.
-    normalize_in H4.
-    solve_neutral_unequal_case.
+    solve_all.
   - intros.
     apply (fundamental_lemma_for_variables ctx T t env H H0).
   - intros.
-    unfold pi, U.
-    normalize.
-    repeat fix_subst_lifts.
-    Check in_Pi.
+    solve_all.
     apply in_Pi.
-    pose (IHTyped1 env H1) as ih1.
-    unfold U in ih1.
-    normalize_in ih1.
-    fix_subst_lifts_in ih1.
-    apply ih1.
+    specialize (IHTyped1 env H1).
+    solve_all.
+    apply IHTyped1.
     intros.
-    normalize.
-    fix_subst_lifts.
-    Check in_cons.
-    pose (IHTyped2 <`env , `a> (in_cons _ _ _ _ H1 H2)) as ih2.
-    unfold U in ih2.
-    normalize_in ih2.
-    fix_subst_lifts_in ih2.
-    apply ih2.
-  - intros.
+    solve_all.
+    apply_cast (IHTyped2 <`env , `a>).
+    solve_all.
+    Unshelve.
+    apply_cast (in_cons _ _ _ _ H1 H2).
+    solve_all.
+   - intros.
     Check in_U.
     eapply (cast (in_U _)).
     unfold U.
-    normalize.
-    fix_subst_lifts.
     lambda_solve.
   - intros.
     Check in_Empty.
-    eapply (cast (in_Empty _)).
-    unfold Empty, U.
-    normalize.
-    lambda_solve.
+    apply_cast in_Empty.
+    solve_all.
 Qed.
 
 
@@ -233,17 +180,5 @@ Theorem consistency : forall t,
 Proof.
   intros.
   pose (fundamental_lemma nil Empty t nil H in_nil) as x.
-  inversion x.
-  unfold Empty in H2.
-  normalize_in H2.
-  solve_neutral_unequal_case.
-  unfold Empty in H0.
-  normalize_in H0.
-  solve_neutral_unequal_case.
-  unfold Empty in H1.
-  normalize_in H1.
-  solve_neutral_unequal_case.
-  unfold Empty in H2.
-  normalize_in H2.
-  solve_neutral_unequal_case.
+  inversion x; solve_all.
 Qed.
