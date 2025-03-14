@@ -122,6 +122,7 @@ Proof.
   clear H0.
   clear env.
   induction H.
+  (* lambda *)
   - intros. 
     eapply (cast (in_fun _ _ _ _)). unfold_all.
     solve_all.
@@ -132,18 +133,19 @@ Proof.
     apply in_cons.
     apply H0.
     apply H1.
+  (* app *)
   - intros.
-    pose (IHTyped1 env H1) as Ih1.
-    pose (IHTyped2 env H1) as Ih2.
-    inversion Ih1.
+    specialize (IHTyped1 env H1).
+    specialize (IHTyped2 env H1).
+    solve_all.
+    inversion IHTyped1.
     (* Prove that it can't be in_U *)
     solve_all.
     (* Do the actual real proof for in_fun *)
     solve_all.
-    apply H4 in Ih2.
+    apply H4 in IHTyped2.
     solve_all.
-    apply_cast Ih2.
-    solve_all.
+    exact IHTyped2.
     (* prove that it can't be in_Pi *)
     solve_all.
     (* prove that it can't be in_Empty *)
