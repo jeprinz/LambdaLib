@@ -478,7 +478,7 @@ Notation "t1 [ s / t2 ]" := (subst s 0 t2 t1) (at level 300, only printing).
 Notation "( t1 , t2 )" := (pair t1 t2) (at level 30, only printing).
 Check pi1.
 Notation "'proj1' t" := (Lambda.pi1 t) (at level 35, only printing).
-Notation "'proj1' t" := (Lambda.pi2 t) (at level 35, only printing).
+Notation "'proj2' t" := (Lambda.pi2 t) (at level 35, only printing).
 
 Compute <fun y => fun z => y (fun x => x y)>.
 Definition metavar_example: QTerm. exact <fun x => x>. Qed.

@@ -184,3 +184,20 @@ Proof.
   pose (fundamental_lemma nil Empty t nil H in_nil) as x.
   inversion x; solve_all.
 Qed.
+
+Theorem test2 : Typed nil <`pi (fun env => asdf) (fun env => asdf)> <`lambda `zero>.
+Proof.
+  apply ty_lambda.
+  apply ty_var.
+  Check ty_zero.
+  apply_cast ty_zero.
+  unfold_all.
+  lambda_solve.
+Qed.
+
+Check fundamental_lemma.
+
+Definition test3 := fundamental_lemma _ _ _ _ test2 in_nil.
+
+Check test3.
+(* I guess this just works?!? *)

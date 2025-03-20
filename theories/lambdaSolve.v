@@ -74,6 +74,9 @@ Ltac fix_subst_lifts_in H :=
 
 Ltac compute_lifts := repeat (try (rewrite lift_lam ; simpl) ;
                               try rewrite lift_app;
+                              try rewrite lift_pair;
+                              try rewrite lift_pi1;
+                              try rewrite lift_pi2;
                               try (rewrite lift_var ; simpl)).
 
 Ltac compute_subst := repeat (try rewrite subst_app ;
@@ -86,7 +89,10 @@ Ltac compute_subst := repeat (try rewrite subst_app ;
 (* Is there a way to not have this be repetetive with the above? *)
 
 Ltac compute_lifts_in H := repeat (try (rewrite lift_lam in H ; simpl in H) ;
-                              try rewrite lift_app in H;
+                                   try rewrite lift_app in H;
+                                   try rewrite lift_pair in H;
+                                   try rewrite lift_pi1 in H;
+                                   try rewrite lift_pi2 in H;
                               try (rewrite lift_var in H ; simpl in H)).
 
 Ltac compute_subst_in H := repeat (try rewrite subst_app in H;

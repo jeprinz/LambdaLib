@@ -20,16 +20,22 @@ Definition succ := <fun x => fun gamma => x (proj1 gamma)>.
 Definition lzero := <lzero>.
 Definition lsuc := <lsuc>.
 Definition pi := <fun x => fun y => fun gamma => Pi (x gamma) (fun a => y (gamma , a))>.
-Definition U : QTerm := <fun lvl => fun env => U lvl>.
+Definition U : QTerm := <fun env => U>.
 Definition Empty := <fun env => Empty>.
+Definition Bool := <fun env => Bool>.
 
 Definition var_to_term := <fun x => x>.
 Definition lambda := <fun t => fun gamma => fun a => t (gamma , a)>.
 Definition app := <fun t1 => fun t2 => fun gamma => (t1 gamma) (t2 gamma)>.
+Definition true := <fun env => fun p => proj1 p>.
+Definition false := <fun env => fun p => proj2 p>.
+Definition ifexpr := <fun cond => fun t1 => fun t2 => fun env => (cond env) (t1 env, t2 env)>.
 
 Definition weaken := <fun t => fun env => t (proj1 env)>.
+Definition subLast := <fun t => fun toSub => fun env => t (env , toSub env)>.
 
-Ltac unfold_all := unfold nil, cons, zero, succ, pi, U, Empty, var_to_term, lambda, app, weaken, lzero, lsuc in *.
+Ltac unfold_all := unfold nil, cons, zero, succ, pi, U, Bool, Empty, var_to_term, lambda,
+    app, weaken, subLast, lzero, lsuc, true, false, ifexpr in *.
 
 (* The deeper shallow embedding *)
 
@@ -42,14 +48,25 @@ Inductive VarTyped : QTerm -> QTerm -> QTerm -> Prop :=
 Inductive Typed : QTerm -> QTerm -> QTerm -> Prop :=
 | ty_lambda : forall ctx A B s, Typed <`cons `ctx `A> B s -> Typed ctx <`pi `A `B> <`lambda `s>
 | ty_app : forall ctx A B s1 s2, Typed ctx <`pi `A `B> s1 -> Typed ctx A s2
-                                 -> Typed ctx <fun env => `B [env] (env , (`s2 [env]) env)> <`app `s1 `s2>
+                                 -> Typed ctx <`subLast `B `s2> <`app `s1 `s2>
 | ty_var : forall ctx T t, VarTyped ctx T t -> Typed ctx T t
-| ty_pi : forall ctx lvl A B,
-    Typed ctx <`U `lvl> A
-    -> Typed <`cons `ctx `A> <`U `lvl> B -> Typed ctx <`U `lvl> <`pi `A `B>
-| ty_U : forall ctx lvl, Typed ctx <`U (`lsuc `lvl)> <`U `lvl>
-| ty_Empty : forall ctx lvl, Typed ctx <`U `lvl> Empty
+| ty_true : forall ctx, Typed ctx Bool true
+| ty_false : forall ctx, Typed ctx Bool false
+| ty_if : forall ctx T cond t1 t2,
+    Typed ctx Bool cond ->
+    Typed ctx <`subLast `T `true> t1 ->
+    Typed ctx <`subLast `T `false> t2 ->
+    Typed ctx <`subLast `T `cond> <`ifexpr `cond `t1 `t2>
+(* TODO: this should allow dependent types *)
+(*
+| ty_pi : forall ctx A B,
+    Typed ctx <`U> A
+    -> Typed <`cons `ctx `A> <`U> B -> Typed ctx <`U> <`pi `A `B>
+| ty_Empty : forall ctx, Typed ctx <`U> Empty
+*)
 .
+
+
 
 Ltac solve_no_unfold := repeat (lambda_solve ; repeat neutral_inj_case ;lambda_solve
                   ; repeat fast_neutral_unequal_case). 
@@ -59,7 +76,8 @@ Ltac solve_all := repeat (unfold_all ; lambda_solve ; repeat neutral_inj_case ;l
 
 
 (* The identity function is typed at U -> U*)
-Theorem test1 : Typed nil <`pi (`U `lzero) (`U `lzero)> <`lambda `zero>.
+(*Theorem test1 : Typed nil <`pi `U0 `U0> <`lambda `zero>.*)
+Theorem test1 : Typed nil <`pi (fun env => asdf) (fun env => asdf)> <`lambda `zero>.
 Proof.
   apply ty_lambda.
   apply ty_var.
@@ -69,65 +87,28 @@ Proof.
   lambda_solve.
 Qed.
 
-Fixpoint nat_to_lvl (n : nat) : QTerm :=
-  match n with
-  | O => lzero
-  | S m => Lambda.app lsuc (nat_to_lvl m)
-  end.
-
-Inductive In' (I : QTerm -> Prop) : QTerm -> (QTerm -> Prop) -> Prop:=
+Inductive In: QTerm -> (QTerm -> Prop) -> Prop:=
 | in_Pi : forall (S : QTerm -> Prop) (F : forall a, (*S a ->*) QTerm -> Prop) A B,
-    In' I A S
-    -> (forall a (s : S a), In' I <`B `a> (F a (*s*)))
-    -> In' I <Pi `A `B> (fun f => forall a (s : S a), F a (*s*) <`f `a>)
-| in_Type : forall todo, (* TODO *)
-    In' I <U `todo> I
-| in_Empty : In' I <Empty> (fun _ => False)
+    In A S
+    -> (forall a (s : S a), In <`B `a> (F a (*s*)))
+    -> In <Pi `A `B> (fun f => forall a (s : S a), F a (*s*) <`f `a>)
+| in_Bool :  In <Bool> (fun b => b = <fun x => proj1 x> \/ b = <fun x => proj2 x>)
+| in_Empty : In <Empty> (fun _ => False)
 .
-
-Fixpoint In'' (i : nat) : QTerm -> (QTerm -> Prop) -> Prop :=
-  match i with
-  | O => In' (fun _ => False)
-  | S i' => In' (fun t => exists S, In'' i' <`U TODO> S /\ S t)
-  end.
 
 Axiom hole : forall {T : Type}, T.
 
-(*
-Theorem fundamental_lemma_test : forall ctx I T t env S,
-    Typed ctx T t -> (*InCtx env ctx -> *) In' I <`T `env> S
-    -> S <`t `env>.
-Proof.
-  intros.
-  generalize env, H0.
-  clear H0.
-  clear env.
-  induction H.
-  (* lambda *)
-  - intros.
-    apply hole.
-  (* app *)
-  - intros.
-    specialize (IHTyped1 env).
-    remember (In' I <`pi `A `B `env>) as thing.
-    inversion IHTyped1.
- *)
-
-Definition swap_args A B C (f : forall (a : A), forall (b : B), C a b)
-    : forall (b : B), forall (a : A), C a b :=
-  fun b a => f a b.
-
-
 Require Import FunctionalExtensionality.
 Require Import Coq.Logic.PropExtensionality.
-Theorem In_function : forall I T S1 S2, In' I T S1 -> In' I T S2 -> S1 = S2.
+
+Theorem In_function : forall T S1 S2, In T S1 -> In T S2 -> S1 = S2.
 Proof.
-  intros I T S1 S2 in1.
+  intros T S1 S2 in1.
   generalize S2.
   clear S2.
   induction in1 as [ S F A B In_A_S In_A_S_only In_Ba_Fa In_Ba_Fa_only | | ].
   - intros S2 in2.
-    inversion in2 as [S' F' A' B' In_A_S' In_Ba_F'a eq extra | |].
+    inversion in2 as [S' F' A' B' In_A_S' In_Ba_F'a eq extra | | ].
     + (* Pi Pi *)
       solve_all.
       clear extra.
@@ -158,23 +139,60 @@ Proof.
         apply hyp.
         apply Sa.
         apply Sa.
-    +  (* Pi U *) solve_all.
-    + (*Pi Empty *) solve_all.
+    + (* Pi Bool *) solve_all.
+    +  (* Pi EMpty *) solve_all.
   - intros.
     inversion H.
-    * (* U Pi *) solve_all.
-    * (* U U *) reflexivity.
-    * (* U Empty *) solve_all.
+    * (* Bool Pi *) solve_all.
+    * (* Bool Bool *) solve_all.
+    * (* Bool Empty *) solve_all.
   - intros.
     inversion H.
     * (* Empty Pi *) solve_all.
-    * (* Empty U *) solve_all.
-    * (* Empty Empty *) reflexivity.
+    * (* Empty Bool *) solve_all.
+    * (* Empty Empty *) solve_all.
 Qed.
 
-Theorem fundamental_lemma_test_2 : forall ctx I T t env,
+(* Will this work? In contrast to the logical relation itself, this is QTerm -> QTerm -> Prop
+instead of QTerm -> (QTerm -> Prop) -> Prop. This seems to correspond to Yiyun's paper. *)
+Inductive InCtx : QTerm -> QTerm -> Prop :=
+| in_nil : InCtx nil nil
+| in_cons : forall env ctx val T S,
+    InCtx env ctx
+    -> In val S
+    -> S <`T `env>
+    -> InCtx <`env , `val> <`cons `ctx `T> 
+.
+
+Theorem fundamental_lemma_for_variables : forall ctx T t env,
+    VarTyped ctx T t -> InCtx env ctx -> exists S, In <`t `env> S /\ S <`T `env>.
+Proof.
+  intros.
+  generalize env, H0.
+  clear H0.
+  clear env.
+  induction H.
+  -
+    intros.
+    inversion H0.
+    + solve_all.
+    +
+      solve_all.
+      exists S.
+      split.
+      assumption.
+      assumption.
+  - intros.
+    inversion H0.
+    + solve_all.
+    + solve_all.
+      apply IHVarTyped.
+      apply H2.
+Qed.
+
+Theorem fundamental_lemma : forall ctx T t env,
     Typed ctx T t (*-> InCtx env ctx -> *)
-    -> exists S, In' I <`T `env> S
+    -> exists S, In <`T `env> S
     /\ S <`t `env>.
 Proof.
   intros.
@@ -183,6 +201,7 @@ Proof.
   induction H.
   (* lambda *)
   - intros.
+    
     apply hole.
   (* app *)
   - intros.
@@ -192,17 +211,20 @@ Proof.
     destruct temp as [inPiAB s1Elem].
     destruct IHTyped2 as [SA temp].
     destruct temp as [inA s2Elem].
-    inversion inPiAB as [ SA' F A' B' In_A'_SA' In_B'a_F'a eq | | ].
+    inversion inPiAB(*.
+    inversion H1*) as [ SA' F A' B' In_A'_SA' In_B'a_F'a eq | |].
     (* The real case *)
     +
       unfold pi in eq.
       solve_no_unfold.
-      assert (SA' = SA). {apply (In_function _ _ _ _ In_A'_SA' inA).}
+      assert (SA' = SA). {apply (In_function _ _ _ In_A'_SA' inA).}
       subst SA'.
       exists (F <`s2 `env>).
       specialize (In_B'a_F'a <`s2 `env> s2Elem).
       normalize_in In_B'a_F'a.
       split.
+      unfold subLast.
+      normalize.
       apply In_B'a_F'a.
       rewrite <- H2 in s1Elem.
       specialize (s1Elem <`s2 `env> s2Elem).
@@ -215,44 +237,88 @@ Proof.
     + solve_all.
   (* var *)
   - apply hole.
-  (* Pi *)
-  - 
-  (* U *)
-  -
-  (* Empty*)
-  -
+  (* true *)
+  - intros.
+    exists (fun b => b = <fun x => proj1 x> \/ b = <fun x => proj2 x>).
+    unfold Bool.
+    normalize.
+    split.
+    apply in_Bool.
+    apply or_introl.
+    solve_all.
+  (* false *)
+  - intros.
+    exists (fun b => b = <fun x => proj1 x> \/ b = <fun x => proj2 x>).
+    unfold Bool.
+    normalize.
+    split.
+    apply in_Bool.
+    apply or_intror.
+    solve_all.
+  (* if *)
+  - intros.
+    specialize (IHTyped1 env).
+    destruct IHTyped1 as [S temp].
+    destruct temp as [In_Bool_S S_cond].
+    inversion In_Bool_S.
+    (* Pi *)
+    + solve_all.
+    (* Bool *)
+    + rewrite <- H2 in S_cond.
+      destruct S_cond.
+      * (*true*)
+        specialize (IHTyped2 env).
+        destruct IHTyped2 as [S0 temp].
+        destruct temp as [In_Ttrue_S0 S0_t1].
+        exists S0.
+        unfold subLast.
+        normalize.
+        unfold subLast, true in In_Ttrue_S0.
+        normalize_in In_Ttrue_S0.
+        rewrite H4.
+        split.
+        apply_cast In_Ttrue_S0.
+        solve_all.
+        (* TODO: make solve_all handle pairs! Then I can simplify this stuff. *)
+        assert (<fun p => proj1 p> = <fun x => proj1 x>). solve_all.
+        rewrite H3.
+        reflexivity.
+        unfold ifexpr.
+        normalize.
+        rewrite H4.
+        normalize.
+        apply S0_t1.
+      * (* false *)
+        specialize (IHTyped3 env).
+        destruct IHTyped3 as [S0 temp].
+        destruct temp as [In_Ttrue_S0 S0_t1].
+        exists S0.
+        unfold subLast.
+        normalize.
+        unfold subLast, true in In_Ttrue_S0.
+        normalize_in In_Ttrue_S0.
+        rewrite H4.
+        split.
+        apply_cast In_Ttrue_S0.
+        solve_all.
+        (* TODO: make solve_all handle pairs! Then I can simplify this stuff. *)
+        assert (<fun p => proj2 p> = <fun x => proj2 x>). solve_all.
+        rewrite H3.
+        reflexivity.
+        unfold ifexpr.
+        normalize.
+        rewrite H4.
+        normalize.
+        apply S0_t1.
+    (* Empty *)
+    + solve_all.
+Qed.
      
 
 (*Definition In : QTerm -> QTerm -> Prop :=
   fun t T => exists S i, In'' i T S /\ S t.*)
 
-Inductive InCtx : QTerm -> QTerm -> Prop :=
-| in_nil : InCtx nil nil
-| in_cons : forall env ctx val T,
-    InCtx env ctx -> In val <`T `env> -> InCtx <`env , `val> <`cons `ctx `T> 
-.
 
-Theorem fundamental_lemma_for_variables : forall ctx T t env,
-    VarTyped ctx T t -> InCtx env ctx -> In <`t `env> <`T `env>.
-Proof.
-  intros.
-  generalize env, H0.
-  clear H0.
-  clear env.
-  induction H.
-  - intros.
-    inversion H0.
-    + solve_all.
-    +
-      solve_all.
-      apply H3.
-  - intros.
-    inversion H0.
-    + solve_all.
-    + solve_all.
-      apply IHVarTyped.
-      apply H2.
-Qed.
 
 Theorem fundamental_lemma : forall ctx T t env,
     Typed ctx T t -> InCtx env ctx -> In <`t `env> <`T `env>.
