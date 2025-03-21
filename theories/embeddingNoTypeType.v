@@ -155,17 +155,19 @@ Qed.
 
 (* Will this work? In contrast to the logical relation itself, this is QTerm -> QTerm -> Prop
 instead of QTerm -> (QTerm -> Prop) -> Prop. This seems to correspond to Yiyun's paper. *)
+(* first arg env, second arg ctx. Idk why I did it like that, its opposite other conventions
+in this file. *)
 Inductive InCtx : QTerm -> QTerm -> Prop :=
 | in_nil : InCtx nil nil
 | in_cons : forall env ctx val T S,
     InCtx env ctx
-    -> In val S
-    -> S <`T `env>
+    -> In <`T `env> S
+    -> S val
     -> InCtx <`env , `val> <`cons `ctx `T> 
 .
 
 Theorem fundamental_lemma_for_variables : forall ctx T t env,
-    VarTyped ctx T t -> InCtx env ctx -> exists S, In <`t `env> S /\ S <`T `env>.
+    VarTyped ctx T t -> InCtx env ctx -> exists S, In <`T `env> S /\ S <`t `env>.
 Proof.
   intros.
   generalize env, H0.
@@ -173,8 +175,8 @@ Proof.
   clear env.
   induction H.
   -
-    intros.
-    inversion H0.
+    intros env inctx.
+    inversion inctx.
     + solve_all.
     +
       solve_all.
@@ -203,9 +205,44 @@ Proof.
   clear env.
   induction H.
   (* lambda *)
-  - intros.
-    
-    apply hole.
+  - intros env inctx.
+    unfold pi.
+    normalize.
+    (* We need to show the "In (Pi ...) ..." from the goal by instantiating in_Pi.
+       but how can I get the In A _ argument needed? *)
+    Check in_Pi.
+    (* If I had that, could I do the rest?
+       In Yiyun's paper, he has that (Pi A B) is well typed in the lambda constructor.
+       For now, I will assume that as holes and see if the rest works. *)
+    assert (exists S, In <`A `env> S). apply hole.
+    destruct H0 as [SA In_A_SA].
+    assert (exists F, (forall a : QTerm, SA a -> In <`B (`env , `a)> (F a))). apply hole.
+    destruct H0 as [F In_Ba_Fa].
+    Check in_Pi.
+    Check (in_Pi SA F <`A `env> <fun a => `B[a] (`env[a] , a)> In_A_SA).
+    (*assert (forall a, <(fun a => `B[a] (`env[a] , a)) `a> = <`B (`env , `a)>). { intros. lambda_solve.}*)
+    assert (forall a : QTerm, SA a -> In <(fun a => `B[a] (`env[a] , a)) `a> (F a)) as In_Ba_Fa_2.
+    {
+      intros.
+      lambda_solve.
+      apply In_Ba_Fa.
+      apply H0.
+    }
+    exists (fun f : QTerm => forall a : QTerm, SA a -> F a <`f `a>).
+    split.
+    Check (in_Pi SA F <`A `env> <fun a => `B[a] (`env[a] , a)> In_A_SA In_Ba_Fa_2).
+    apply (in_Pi SA F <`A `env> <fun a => `B[a] (`env[a] , a)> In_A_SA In_Ba_Fa_2).
+    intros a SAa.
+    Check in_cons.
+    specialize (In_Ba_Fa a SAa).
+    Check (IHTyped <`env , `a> (in_cons _ _ _ _ SA inctx In_A_SA SAa)).
+    destruct (IHTyped <`env , `a> (in_cons _ _ _ _ SA inctx In_A_SA SAa)) as [Fa' temp].
+    destruct temp as [InBFa' Fa's].
+    unfold lambda.
+    normalize.
+    Check In_function.
+    rewrite (In_function _ _ _ In_Ba_Fa InBFa').
+    apply Fa's.
   (* app *)
   - intros env inctx.
     specialize (IHTyped1 env inctx).
@@ -239,7 +276,8 @@ Proof.
     (* Its not empty*)
     + solve_all.
   (* var *)
-  - apply hole.
+  - intros env inctx.
+    apply (fundamental_lemma_for_variables ctx T t env H inctx).
   (* true *)
   - intros env inctx.
     exists (fun b => b = <fun x => proj1 x> \/ b = <fun x => proj2 x>).
@@ -317,10 +355,6 @@ Proof.
     + solve_all.
 Qed.
      
-
-(*Definition In : QTerm -> QTerm -> Prop :=
-  fun t T => exists S i, In'' i T S /\ S t.*)
-
 Theorem consistency : forall t,
     Typed nil Empty t -> False.
 Proof.
