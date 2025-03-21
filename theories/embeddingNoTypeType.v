@@ -192,11 +192,14 @@ Qed.
 
 Theorem fundamental_lemma : forall ctx T t env,
     Typed ctx T t (*-> InCtx env ctx -> *)
+    -> InCtx env ctx
     -> exists S, In <`T `env> S
     /\ S <`t `env>.
 Proof.
   intros.
+  generalize H0.
   generalize env.
+  clear H0.
   clear env.
   induction H.
   (* lambda *)
@@ -204,9 +207,9 @@ Proof.
     
     apply hole.
   (* app *)
-  - intros.
-    specialize (IHTyped1 env).
-    specialize (IHTyped2 env).
+  - intros env inctx.
+    specialize (IHTyped1 env inctx).
+    specialize (IHTyped2 env inctx).
     destruct IHTyped1 as [SPIAB temp].
     destruct temp as [inPiAB s1Elem].
     destruct IHTyped2 as [SA temp].
@@ -238,7 +241,7 @@ Proof.
   (* var *)
   - apply hole.
   (* true *)
-  - intros.
+  - intros env inctx.
     exists (fun b => b = <fun x => proj1 x> \/ b = <fun x => proj2 x>).
     unfold Bool.
     normalize.
@@ -256,8 +259,8 @@ Proof.
     apply or_intror.
     solve_all.
   (* if *)
-  - intros.
-    specialize (IHTyped1 env).
+  - intros env inctx.
+    specialize (IHTyped1 env inctx).
     destruct IHTyped1 as [S temp].
     destruct temp as [In_Bool_S S_cond].
     inversion In_Bool_S.
@@ -267,7 +270,7 @@ Proof.
     + rewrite <- H2 in S_cond.
       destruct S_cond.
       * (*true*)
-        specialize (IHTyped2 env).
+        specialize (IHTyped2 env inctx).
         destruct IHTyped2 as [S0 temp].
         destruct temp as [In_Ttrue_S0 S0_t1].
         exists S0.
@@ -289,7 +292,7 @@ Proof.
         normalize.
         apply S0_t1.
       * (* false *)
-        specialize (IHTyped3 env).
+        specialize (IHTyped3 env inctx).
         destruct IHTyped3 as [S0 temp].
         destruct temp as [In_Ttrue_S0 S0_t1].
         exists S0.
@@ -318,77 +321,14 @@ Qed.
 (*Definition In : QTerm -> QTerm -> Prop :=
   fun t T => exists S i, In'' i T S /\ S t.*)
 
-
-
-Theorem fundamental_lemma : forall ctx T t env,
-    Typed ctx T t -> InCtx env ctx -> In <`t `env> <`T `env>.
-Proof.
-  intros.
-  generalize env, H0.
-  clear H0.
-  clear env.
-  induction H.
-  (* lambda *)
-  - intros.
-    unfold In, In'' in *.
-    intros.
-    eapply (cast (in_fun _ _ _ _)). unfold_all.
-    solve_all.
-    Unshelve. (* This focuses the goal from the argument to in_fun *)
-    intros.
-    lambda_solve.
-    apply IHTyped.
-    apply in_cons.
-    apply H0.
-    apply H1.
-  (* app *)
-  - intros.
-    specialize (IHTyped1 env H1).
-    specialize (IHTyped2 env H1).
-    solve_all.
-    inversion IHTyped1.
-    (* Prove that it can't be in_U *)
-    solve_all.
-    (* Do the actual real proof for in_fun *)
-    solve_all.
-    apply H4 in IHTyped2.
-    solve_all.
-    exact IHTyped2.
-    (* prove that it can't be in_Pi *)
-    solve_all.
-    (* prove that it can't be in_Empty *)
-    solve_all.
-  - intros.
-    apply (fundamental_lemma_for_variables ctx T t env H H0).
-  - intros.
-    solve_all.
-    apply in_Pi.
-    specialize (IHTyped1 env H1).
-    solve_all.
-    apply IHTyped1.
-    intros.
-    solve_all.
-    apply_cast (IHTyped2 <`env , `a>).
-    solve_all.
-    Unshelve.
-    apply_cast (in_cons _ _ _ _ H1 H2).
-    solve_all.
-   - intros.
-    Check in_U.
-    eapply (cast (in_U _)).
-    unfold U.
-    lambda_solve.
-  - intros.
-    Check in_Empty.
-    apply_cast in_Empty.
-    solve_all.
-Qed.
-
-
 Theorem consistency : forall t,
     Typed nil Empty t -> False.
 Proof.
   intros.
   pose (fundamental_lemma nil Empty t nil H in_nil) as x.
-  inversion x; solve_all.
+  destruct x.
+  destruct H0.
+  inversion H0; solve_all.
+  rewrite <- H2 in H1.
+  assumption.
 Qed.
