@@ -430,28 +430,53 @@ Proof.
       apply H0.
     Defined.
 
-    
     pose (fun (a : QTerm) (sa : SA a) =>
             hasInterp _ _ (IHTyped2 <`env, `a>
                 (in_cons _ _ _ _ _ inctx (in' _ _ InASA) sa))) as thing2.
     
-    Check proj1_sig.
-    Check ex_intro.
-    Search (ex ?A ?P).
-    Search (exists x : ?A, ?P -> ?A).
-    pose (fun (a : QTerm) (b : QTerm) => forall (sa : SA a), proj1 (thing2 a sa) b) as F.
-    
-    Check proj_1.
+    (*pose (fun (a : QTerm) (b : QTerm) => forall (sa : SA a),
+              match (thing2 a sa) with
+              | ex_intro _ SB _ => SB b
+              end) as F.*)
+    pose (fun (a b : QTerm) => exists SB, In' <`B (`env , `a)> SB /\ SB b) as F.
+    assert (forall a (s : SA a), In' <`B (`env ,`a)> (F a)).
+    {
+      intros a SAa.
+      destruct (thing2 a SAa) as [SB INBSB].
+      assert (F a = SB).
+      apply functional_extensionality.
+      intros b.
+      unfold F.
+      apply propositional_extensionality.
+      split.
+      intros.
+      destruct H3.
+      destruct H3.
+      rewrite <- (In_function _ _ _ (in' _ _ INBSB) (in' _ _ H3)) in H4.
+      assumption.
+      intros SBb.
+      exists SB.
+      split.
+      assumption.
+      assumption.
+      rewrite <- H3 in INBSB.
+      assumption.
+    }
+    assert (forall a : QTerm, SA a -> In' <(fun a => `B [a] (`env [a], a)) `a> (F a)).
+    {
+      intros a sa.
+      normalize.
+      apply H3.
+      apply sa.
+    }
 
     Check in_cons.
     Check (in_cons _ _ _ _ _ inctx (in' _ _ InASA)).
-    
-(*
-| in_Pi : forall (S : QTerm -> Prop) (F : forall a, (*S a ->*) QTerm -> Prop) A B,
-    In' A S
-    -> (forall a (s : S a), In' <`B `a> (F a (*s*)))
-    -> In' <Pi `A `B> (fun f => forall a (s : S a), F a (*s*) <`f `a>)
-*)    
+    Check (in_Pi SA F <`A `env> <fun a => `B[a] (`env[a] , a)> InASA H4).
+    exists (fun f : QTerm => forall a : QTerm, SA a -> F a <`f `a>).
+    unfold pi.
+    normalize.
+    apply (in_Pi SA F <`A `env> <fun a => `B[a] (`env[a] , a)> InASA H4).
 Qed.
      
 Theorem consistency : forall t,
