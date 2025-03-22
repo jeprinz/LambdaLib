@@ -59,11 +59,12 @@ Inductive Typed : QTerm -> QTerm -> QTerm -> Prop :=
     Typed ctx <`subLast `T `cond> <`ifexpr `cond `t1 `t2>
 (* TODO: this should allow dependent types *)
 (*
+| ty_Empty : forall ctx, Typed ctx <`U> Empty
+ *)
+| ty_Bool : forall ctx, Typed ctx <`U> Bool
 | ty_pi : forall ctx A B,
     Typed ctx <`U> A
     -> Typed <`cons `ctx `A> <`U> B -> Typed ctx <`U> <`pi `A `B>
-| ty_Empty : forall ctx, Typed ctx <`U> Empty
-*)
 .
 
 
@@ -372,6 +373,85 @@ Proof.
     + solve_all.
     (* Type case *)
     + solve_all.
+  (* Bool : Type *)
+  - intros.
+    exists (fun T => exists S, In' T S).
+    unfold U. normalize.
+    Check in_type.
+    split.
+    apply in_type.
+    exists (fun b => b = <fun x => proj1 x> \/ b = <fun x => proj2 x>).
+    unfold Bool.
+    normalize.
+    apply in_Bool.
+  (* Pi : Type*)
+  - intros env inctx.
+    Check in_Pi.
+    (*
+      To summarize, our induction hypotheses are that:
+      1) In any environment related to ctx, A has an interpreetation
+      2) In any environment related to (cons ctx A), B has an interpreetation
+      And we need to show that:
+         In an environment related to ctx, (Pi A B) has an interpretation.
+
+
+      I think that this should work, but we may need to modify in_Pi so that
+      instead of
+      F : QTerm -> QTerm -> Prop
+      we have
+      F : forall (a : QTerm), S a -> QTerm -> Prop.
+      I'm not sure yet if this is needed though.
+     *)
+    exists (fun T => exists S, In' T S).
+    unfold U. normalize.
+    split.
+    apply in_type.
+    specialize (IHTyped1 env inctx).
+    Check in_Pi.
+    destruct IHTyped1 as [SAU temp].
+    destruct temp as [InUSA SAA].
+    inversion InUSA.
+    inversion H1; solve_all.
+    rewrite <- H1 in SAA.
+    destruct SAA as [SA InASA].
+
+    pose (fun (a : QTerm) (sa : SA a) => IHTyped2 <`env, `a>
+                   (in_cons _ _ _ _ _ inctx (in' _ _ InASA) sa)) as thing.
+
+    Set Nested Proofs Allowed.
+    Lemma hasInterp : forall t env, (exists S, In <`U `env> S /\ S t) -> (exists S', In' t S').
+    Proof.
+      intros.
+      destruct H.
+      destruct H.
+      inversion H.
+      inversion H1; solve_all.
+      rewrite <- H1 in H0.
+      apply H0.
+    Defined.
+
+    
+    pose (fun (a : QTerm) (sa : SA a) =>
+            hasInterp _ _ (IHTyped2 <`env, `a>
+                (in_cons _ _ _ _ _ inctx (in' _ _ InASA) sa))) as thing2.
+    
+    Check proj1_sig.
+    Check ex_intro.
+    Search (ex ?A ?P).
+    Search (exists x : ?A, ?P -> ?A).
+    pose (fun (a : QTerm) (b : QTerm) => forall (sa : SA a), proj1 (thing2 a sa) b) as F.
+    
+    Check proj_1.
+
+    Check in_cons.
+    Check (in_cons _ _ _ _ _ inctx (in' _ _ InASA)).
+    
+(*
+| in_Pi : forall (S : QTerm -> Prop) (F : forall a, (*S a ->*) QTerm -> Prop) A B,
+    In' A S
+    -> (forall a (s : S a), In' <`B `a> (F a (*s*)))
+    -> In' <Pi `A `B> (fun f => forall a (s : S a), F a (*s*) <`f `a>)
+*)    
 Qed.
      
 Theorem consistency : forall t,
