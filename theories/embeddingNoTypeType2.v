@@ -46,7 +46,9 @@ Inductive VarTyped : QTerm -> QTerm -> QTerm -> Prop :=
 .
 
 Inductive Typed : QTerm -> QTerm -> QTerm -> Prop :=
-| ty_lambda : forall ctx A B s, Typed <`cons `ctx `A> B s -> Typed ctx <`pi `A `B> <`lambda `s>
+| ty_lambda : forall ctx A B s,
+    Typed ctx <`U> <`pi `A `B> ->
+    Typed <`cons `ctx `A> B s -> Typed ctx <`pi `A `B> <`lambda `s>
 | ty_app : forall ctx A B s1 s2, Typed ctx <`pi `A `B> s1 -> Typed ctx A s2
                                  -> Typed ctx <`subLast `B `s2> <`app `s1 `s2>
 | ty_var : forall ctx T t, VarTyped ctx T t -> Typed ctx T t
@@ -78,6 +80,7 @@ Ltac solve_all := repeat (unfold_all ; lambda_solve ; repeat neutral_inj_case ;l
 
 (* The identity function is typed at U -> U*)
 (*Theorem test1 : Typed nil <`pi `U0 `U0> <`lambda `zero>.*)
+(*
 Theorem test1 : Typed nil <`pi (fun env => asdf) (fun env => asdf)> <`lambda `zero>.
 Proof.
   apply ty_lambda.
@@ -87,6 +90,7 @@ Proof.
   unfold_all.
   lambda_solve.
 Qed.
+*)
 
 Inductive In': QTerm -> (QTerm -> Prop) -> Prop:=
 | in_Pi : forall (S : QTerm -> Prop) (F : forall a, (*S a ->*) QTerm -> Prop) A B,
@@ -102,28 +106,25 @@ Inductive In : QTerm -> (QTerm -> Prop) -> Prop :=
 | in_type : In <U> (fun T => exists S, In' T S)
 .
 
-Axiom hole : forall {T : Type}, T.
-
 Require Import FunctionalExtensionality.
 Require Import Coq.Logic.PropExtensionality.
 
 Theorem In_function : forall T S1 S2, In T S1 -> In T S2 -> S1 = S2.
 Proof.
-  (*
   intros T S1 S2 in1.
   generalize S2.
   clear S2.
   induction in1 as [T S in1 | typeCase].
   induction in1 as [ S F A B In_A_S In_A_S_only In_Ba_Fa In_Ba_Fa_only | | ].
   - intros S2 in2.
-    induction in2 as [T S'' in2 | ].
-    inversion in2 as [S' F' A' B' In_A_S' In_Ba_F'a eq extra | | ].
+    inversion in2 as [T S'' in2' | ].
+    inversion in2' as [S' F' A' B' In_A_S' In_Ba_F'a eq extra | | ].
     + (* Pi Pi *)
       solve_all.
       clear extra.
       clear in2.
-      clear S''.
-      specialize (In_A_S_only S' In_A_S').
+      (*clear S''.*)
+      specialize (In_A_S_only S' (in' _ _ In_A_S')).
       subst S'.
 
       assert (forall a, S a -> F a = F' a).
@@ -131,6 +132,7 @@ Proof.
         intros.
         apply In_Ba_Fa_only.
         apply H.
+        apply in'.
         apply In_Ba_F'a.
         apply H.
       }
@@ -150,19 +152,25 @@ Proof.
         apply Sa.
     + (* Pi Bool *) solve_all.
     +  (* Pi EMpty *) solve_all.
+    + (* Pi Type *) solve_all.
   - intros.
     inversion H.
+    inversion H0.
     * (* Bool Pi *) solve_all.
     * (* Bool Bool *) solve_all.
     * (* Bool Empty *) solve_all.
+    * (* Bool Type *) solve_all.
   - intros.
     inversion H.
+    inversion H0.
     * (* Empty Pi *) solve_all.
     * (* Empty Bool *) solve_all.
     * (* Empty Empty *) solve_all.
-    *)
-  (* TODO. I think that this probably still works. Lets see what goes wrong later. *)
-  apply hole.
+    * (* Empty Type *) solve_all.
+  - intros.
+    inversion H.
+    inversion H0; solve_all. (* Type x anything cases*)
+    reflexivity. (* Type Type case*)
 Qed.
 
 (* Will this work? In contrast to the logical relation itself, this is QTerm -> QTerm -> Prop
@@ -226,30 +234,50 @@ Proof.
     (* If I had that, could I do the rest?
        In Yiyun's paper, he has that (Pi A B) is well typed in the lambda constructor.
        For now, I will assume that as holes and see if the rest works. *)
-    assert (exists S, In' <`A `env> S). apply hole.
-    destruct H0 as [SA In_A_SA].
-    assert (exists F, (forall a : QTerm, SA a -> In' <`B (`env , `a)> (F a))). apply hole.
-    destruct H0 as [F In_Ba_Fa].
+    specialize (IHTyped1 env inctx).
+    destruct IHTyped1 as [SU temp].
+    destruct temp as [InUPiAB SPiABPiAB].
+    inversion InUPiAB.
+    inversion H1; solve_all. (* can't be any of the non-U cases *)
+    rewrite <- H1 in SPiABPiAB.
+    destruct SPiABPiAB as [SPiAB In'PiAB].
+    inversion In'PiAB; try solve_all.
+    assert (In' <`A `env> S) as INA.
+    {
+      apply H4.
+    }
+    (*destruct H1 as [SA In_A_SA].*)
+    assert (forall a : QTerm, S a -> In' <`B (`env , `a)> (F a)) as In_Ba_Fa.
+    {
+      intros a sa.
+      specialize (H5 a sa).
+      normalize_in H5.
+      apply H5.
+    }
     Check in_Pi.
-    Check (in_Pi SA F <`A `env> <fun a => `B[a] (`env[a] , a)> In_A_SA).
+    Check (in_Pi S F <`A `env> <fun a => `B[a] (`env[a] , a)> H4).
     (*assert (forall a, <(fun a => `B[a] (`env[a] , a)) `a> = <`B (`env , `a)>). { intros. lambda_solve.}*)
-    assert (forall a : QTerm, SA a -> In' <(fun a => `B[a] (`env[a] , a)) `a> (F a)) as In_Ba_Fa_2.
+    assert (forall a : QTerm, S a -> In' <(fun a => `B[a] (`env[a] , a)) `a> (F a)) as In_Ba_Fa_2.
     {
       intros.
       lambda_solve.
       apply In_Ba_Fa.
-      apply H0.
+      apply H2.
     }
-    exists (fun f : QTerm => forall a : QTerm, SA a -> F a <`f `a>).
+    exists (fun f : QTerm => forall a : QTerm, S a -> F a <`f `a>).
     split.
-    Check (in_Pi SA F <`A `env> <fun a => `B[a] (`env[a] , a)> In_A_SA In_Ba_Fa_2).
+    Check (in_Pi S F <`A `env> <fun a => `B[a] (`env[a] , a)> H4 In_Ba_Fa_2).
     apply in'.
-    apply (in_Pi SA F <`A `env> <fun a => `B[a] (`env[a] , a)> In_A_SA In_Ba_Fa_2).
+    apply (in_Pi S F <`A `env> <fun a => `B[a] (`env[a] , a)> H4 In_Ba_Fa_2).
     intros a SAa.
     Check in_cons.
     specialize (In_Ba_Fa a SAa).
-    Check (IHTyped <`env , `a> (in_cons _ _ _ _ SA inctx (in' _ _ In_A_SA) SAa)).
-    destruct (IHTyped <`env , `a> (in_cons _ _ _ _ SA inctx (in' _ _ In_A_SA) SAa)) as [Fa' temp].
+    (*Check (IHTyped2 <`env , `a> (in_cons _ _ _ _ S inctx (in' _ _ H4) SAa)).*)
+    Check in_cons.
+    specialize (IHTyped2 <`env , `a>).
+    assert (<cons `ctx `A> = <`cons `ctx `A>). unfold cons. normalize. reflexivity.
+    rewrite H2 in IHTyped2.
+    destruct (IHTyped2 (in_cons _ _ _ _ S inctx (in' _ _ INA) SAa)) as [Fa' temp].
     destruct temp as [InBFa' Fa's].
     unfold lambda.
     normalize.
