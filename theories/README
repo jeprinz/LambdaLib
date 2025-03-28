@@ -1,23 +1,11 @@
-I need three types of lambda calculus terms:
+This repository contains
 
-1) Deep embedding of lambda calculus terms
-2) Quotiented lambda calculus terms, built out of 1)
-3) Deep syntax which is similar to 1) but has a constructor inputting 2) so that it can handle metavariables.
-
-I also have some design decisions to make, like:
- * Should I have the types be indexed by the context, or not be intrinsically scoped?
- * Should I try to reduce the repetition between the 3 types of terms above somehow?
- * Should I use simultaneous substitution of single substitution?
- * I need named variables in 3), but should I have them in 1) and 2)?
-
-In this folder, I'm trying the following set of decisions:
- * Single substitution. This will be more efficient for the syntax, and is all I need anyway.
- * Not intrinsically scoped. Its not clear to me currently if this will cause any problems, but
-   then its also not clear to me if intrinsic scoping would cause problems either.
-   There may be an issue with enforcing that metavariables are in empty scope.
- * Named variable representation throughout. Specifically, each variable is a string
-   along with a number, which represents which'th variable of that name in context is
-   reffered to. This means that substitution is more like deBruin substitution and
-   does not need to be capture avoiding.
- * 1) and 3) will be defined as different instantiations of the same more general module,
-   unless I decide that its easier not to after building 1) and 2).
+1) An axiomatization of quotient types, in quotient.v. This is based on the one from Lean.
+2) A definition of untyped lambda calculus terms and convertibility, in term.v, as well as
+   terms quotiented up to convertibility, in qterm.v.
+   There are a couple of axioms currently that say things like if x a = x b, then a = b, and also that
+   x a != y b. I plan to prove these and not leave them as axioms.
+   In lambdaSolve.v, I define a tactic which automatically solves lambda calculus equations.
+3) In embeddingOneTypeLevel.v I use the lambda calculus to define a deeper shallow embedding
+   of dependent type theory (with one type level), and prove its consistency with a logical preciate.
+   The proof is based on https://www.seas.upenn.edu/~sweirich/papers/liu-mltt-consistency.pdf
