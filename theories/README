@@ -9,3 +9,9 @@ This repository contains
 3) In embeddingOneTypeLevel.v I use the lambda calculus to define a deeper shallow embedding
    of dependent type theory (with one type level), and prove its consistency with a logical preciate.
    The proof is based on https://www.seas.upenn.edu/~sweirich/papers/liu-mltt-consistency.pdf
+
+
+
+As part of the notation system for the lambda calculus library, I am using code from
+https://github.com/mit-plv/koika/blob/master/coq/IdentParsing.v
+as described in https://people.csail.mit.edu/bthom/coqpl21.pdf
