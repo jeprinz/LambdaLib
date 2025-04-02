@@ -443,6 +443,8 @@ Proof.
   assumption.
 Qed.
 
+(* See https://stackoverflow.com/questions/69229094/is-it-possible-to-turn-unification-errors-into-goals-in-coq
+for a library that already has something like this *)
 Ltac apply_cast H :=
   let H' := fresh "H'" in
   pose H as H';

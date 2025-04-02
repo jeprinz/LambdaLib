@@ -318,13 +318,35 @@ A construct that is Pif but with a unique choice of a value
 
 Check Pif.
 
+Definition uniqueToPartial {T : Type} (P : T -> Prop) (u : exists t, unique P t) : Partial T.
+  refine (exist _ P _).
+  intros.
+  destruct u.
+  destruct H1.
+  assert (H3 := H2 _ H).
+  assert (H4 := H2 _ H0).
+  subst.
+  reflexivity.
+Defined.
+
+Theorem uniqueToSame {T : Type} (P : T -> Prop) (u : exists t, unique P t) :
+  forall t1 t2, P t1 -> P t2 -> t1 = t2.
+Proof.
+  intros.
+  destruct u.
+  destruct H1.
+  assert (u1 := H2 _ H).
+  assert (u2 := H2 _ H0).
+  subst.
+  reflexivity.
+Qed.
+  
 Definition Pmatch {T A : Type} (P : T -> Prop)
-           (unique : forall t1 t2, P t1 -> P t2 -> t1 = t2)
            (branch1 : T -> Partial A) (branch2 : Partial A) : Partial A.
   refine (exist _ (fun a =>
-                     (exists t, P t /\ proj1_sig (branch1 t) a)
+                     (exists t, unique P t /\ proj1_sig (branch1 t) a)
                      \/
-                       (not (exists t, P t) /\ proj1_sig branch2 a))
+                       (not (exists t, unique P t) /\ proj1_sig branch2 a))
                 _).
   intros.
   destruct H.
@@ -333,7 +355,9 @@ Definition Pmatch {T A : Type} (P : T -> Prop)
   destruct H0.
   destruct H0.
   destruct H0.
-  specialize (unique _ _ H H0).
+  destruct H.
+  destruct H0.
+  specialize (H3 _ H0).
   subst.
   apply (proj2_sig (branch1 x1) _ _ H1 H2).
 
@@ -359,11 +383,10 @@ Defined.
 
 Check PifDef1.
 Theorem PmatchDef1 {T A : Type} (P : T -> Prop)
-        (unique : forall t1 t2, P t1 -> P t2 -> t1 = t2)
         (branch1 : T -> Partial A) (branch2 : Partial A)
-        (u : exists t, P t)
+        (u : exists t, unique P t)
 (*  : Pmatch P branch1 branch2 = Pbind (uniqueToPartial P u) (fun t => branch1 t).*)
-  : Pmatch P unique branch1 branch2 = Pbind (exist _ P unique) (fun t => branch1 t).
+  : Pmatch P branch1 branch2 = Pbind (exist _ P (uniqueToSame P u)) (fun t => branch1 t).
 Proof.
   apply partialEq.
   extensionality a.
@@ -374,6 +397,7 @@ Proof.
     + destruct H.
       destruct H.
       simpl.
+      destruct H.
       eexists.
       split.
       apply H.
@@ -387,18 +411,18 @@ Proof.
     destruct u.
     eexists.
     split.
-    apply H1.
+    apply u.
     simpl in H.
-    specialize (unique _ _ H1 H).
+    destruct u.
+    specialize (H2 _ H).
     subst.
     assumption.
 Qed.
 
 Theorem PmatchDef2 {T A : Type} (P : T -> Prop)
-        (unique : forall t1 t2, P t1 -> P t2 -> t1 = t2)
         (branch1 : T -> Partial A) (branch2 : Partial A)
-        (ne : forall t, P t -> False)
-  : Pmatch P unique branch1 branch2 = branch2.
+        (ne : not (exists t, unique P t))
+  : Pmatch P branch1 branch2 = branch2.
 Proof.
   destruct branch2.
   apply partialEq.
@@ -411,95 +435,100 @@ Proof.
     destruct H.
     destruct H.
     exfalso.
-    apply (ne _ H).
+    apply ne.
+    eexists.
     apply H.
+    destruct H.
+    assumption.
   - intros.
     apply or_intror.
     split.
-    intros ex.
-    destruct ex.
-    apply (ne _ H0).
+    assumption.
     assumption.
 Qed.
+
+
+(*
+While the above idea works, I think there might be a better way to think of it as composed
+of other things.
+I could define a unique choice principle, saying that
+partialOfUnique : (exists unique x, P x) -> Partial _
+
+And then
+forall t, P t -> partialOfUnique P _ = return t
+*)
+
+Definition summon {T : Type} (P : T -> Prop) (u : forall t1 t2, P t1 -> P t2 -> t1 = t2) : Partial T.
+  refine (exist _ P u).
+Defined.
+
+(* This is just the "isItReturn" above *)
+Theorem substantiate {T : Type} (P : T -> Prop) (t : T) (H : P t)
+        (u : forall t1 t2, P t1 -> P t2 -> t1 = t2)
+  : summon P u = Preturn t.
+Proof.
+  apply partialEq.
+  extensionality y.
+  apply propositional_extensionality.
+  split.
+  - intros.
+    specialize (u _ _ H H0).
+    subst.
+    reflexivity.
+  - intros.
+    subst.
+    assumption.
+Qed.
+
+(* Can I define Pmatch in terms of Pif and summon?
+ I need Pif to take Partials for the branches instead of just As.
+ I also need the branches to be (P -> Parital A) and (not P -> Partial A)
+ so they can use the knowledge of the proposition in their definitions. *)
+(*Definition Pmatch2 {T A : Type} (P : T -> Prop)
+           (branch1 : T -> Partial A) (branch2 : Partial A) : Partial A.
+  refine (Pif (exists t, unique P t) (Pbind (summon P )) branch2).*)
 
 (* Example of using Pmatch: map [0, x] to x and otherwise 0 *)
 
 Require Import List.
 Import ListNotations.
 Check [ 1 ; 2 ].
-Definition functionUsingMatch : list nat -> Partial nat.
-  refine (fun l => Pmatch (fun y => l = [0 ; y]) _ (fun y => Preturn y) (Preturn 0)).
-  Set Nested Proofs Allowed.
-  Theorem opaque_thing : forall l t1 t2, l = [0; t1] -> l = [0; t2] -> t1 = t2.
-  Proof.
-    intros.
-    subst.
-    inversion H0.
-    reflexivity.
-  Qed.
-  Unset Nested Proofs Allowed.
-  apply opaque_thing.
-Defined.
+Definition functionUsingMatch : list nat -> Partial nat
+  := (fun l => Pmatch (fun y => l = [0 ; y]) (fun y => Preturn y) (Preturn 0)).
 
 Theorem testFunctionUsingMatch1 :
   functionUsingMatch [0 ; 5] = Preturn 5.
-Proof.
   unfold functionUsingMatch.
-  rewrite PmatchDef1.
+  Check PmatchDef1.
+  erewrite PmatchDef1.
+  Unshelve.
   erewrite itIsReturn.
+  Unshelve.
   rewrite bindDef2.
   reflexivity.
   reflexivity.
   exists 5.
   split.
+  reflexivity.
+  intros.
+  inversion H.
+  reflexivity.
 Qed.
 
 Theorem testFunctionUsingMatch2 :
   functionUsingMatch [1 ; 5] = Preturn 0.
-Proof.
   unfold functionUsingMatch.
-  erewrite PmatchDef2 ; [| intros; inversion H].
+  erewrite PmatchDef2.
   reflexivity.
+  intros H.
+  destruct H.
+  destruct H.
+  inversion H.
 Qed.
 
-(* So this works on some level. But how can this be automated usefully? *)
-
-(* Duh this is how it should be: *)
-Theorem PmatchDef1' {T A : Type} {P : T -> Prop} {t : T} (H : P t)
-        (unique : forall t1 t2, P t1 -> P t2 -> t1 = t2)
-        (branch1 : T -> Partial A) (branch2 : Partial A)
-  : Pmatch P unique branch1 branch2 = branch1 t.
-Proof.
-  apply partialEq2.
-  extensionality a.
-  apply propositional_extensionality.
-  split.
-  - intros.
-    destruct H0.
-    + destruct H0.
-      simpl.
-      destruct H0.
-      specialize (unique _ _ H H0).
-      subst.
-      apply H1.
-    + destruct H0.
-      exfalso.
-      apply H0.
-      exists t.
-      assumption.
-  - intros.
-    simpl.
-    apply or_introl.
-    eexists.
-    split.
-    apply H.
-    apply H0.
-Qed.
-
-Theorem testFunctionUsingMatch1' :
-  functionUsingMatch [0 ; 5] = Preturn 5.
-Proof.
-  unfold functionUsingMatch.
-  erewrite PmatchDef1' ; [|reflexivity].
-  reflexivity.
-Qed.
+(* So this works on some level. But how can this be automated usefully? 
+   Also, it seems like the statement that the predicate in Pmatch matches at most one thing
+   should be an input to Pmatch itself. It seems wrong to have the "else" case trigger if there is
+   more than one match, which is the current setup.
+   Also, this would make the defining equations simpler, which would probably make automation simpler.
+*)
