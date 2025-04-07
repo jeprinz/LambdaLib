@@ -59,7 +59,6 @@ Inductive Typed : QTerm -> QTerm -> QTerm -> Prop :=
     Typed ctx <`subLast `T `true> t1 ->
     Typed ctx <`subLast `T `false> t2 ->
     Typed ctx <`subLast `T `cond> <`ifexpr `cond `t1 `t2>
-(* TODO: this should allow dependent types *)
 (*
 | ty_Empty : forall ctx, Typed ctx <`U> Empty
  *)

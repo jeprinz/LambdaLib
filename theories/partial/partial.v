@@ -191,7 +191,7 @@ Qed.
 
 Inductive Prog (A B : Type) : Type :=
 | Ret : Partial B -> Prog A B
-| Rec : A -> (B -> Prog A B) -> Prog A B
+| Rec : A -> (B -> Prog A B) -> Prog A B (* TODO: The input should be Partial A instead of just A *)
 .
 
 Inductive runProgR {A B : Type} (def : A -> Prog A B) : Prog A B -> Partial B -> Prop :=
@@ -357,41 +357,35 @@ Definition Pmatch {T A : Type} (P : T -> Prop)
   apply (proj2_sig branch2 _ _ H1 H2).
 Defined.
 
-Check PifDef1.
-Theorem PmatchDef1 {T A : Type} (P : T -> Prop)
+Theorem PmatchDef1 {T A : Type} {P : T -> Prop} {t : T} (H : P t)
         (unique : forall t1 t2, P t1 -> P t2 -> t1 = t2)
         (branch1 : T -> Partial A) (branch2 : Partial A)
-        (u : exists t, P t)
-(*  : Pmatch P branch1 branch2 = Pbind (uniqueToPartial P u) (fun t => branch1 t).*)
-  : Pmatch P unique branch1 branch2 = Pbind (exist _ P unique) (fun t => branch1 t).
+  : Pmatch P unique branch1 branch2 = branch1 t.
 Proof.
-  apply partialEq.
+  apply partialEq2.
   extensionality a.
   apply propositional_extensionality.
   split.
   - intros.
-    destruct H.
-    + destruct H.
-      destruct H.
+    destruct H0.
+    + destruct H0.
       simpl.
-      eexists.
-      split.
-      apply H.
+      destruct H0.
+      specialize (unique _ _ H H0).
+      subst.
+      apply H1.
+    + destruct H0.
+      exfalso.
       apply H0.
-    + destruct H.
-      contradiction.
+      exists t.
+      assumption.
   - intros.
-    destruct H.
-    destruct H.
+    simpl.
     apply or_introl.
-    destruct u.
     eexists.
     split.
-    apply H1.
-    simpl in H.
-    specialize (unique _ _ H1 H).
-    subst.
-    assumption.
+    apply H.
+    apply H0.
 Qed.
 
 Theorem PmatchDef2 {T A : Type} (P : T -> Prop)
@@ -445,13 +439,8 @@ Theorem testFunctionUsingMatch1 :
   functionUsingMatch [0 ; 5] = Preturn 5.
 Proof.
   unfold functionUsingMatch.
-  rewrite PmatchDef1.
-  erewrite itIsReturn.
-  rewrite bindDef2.
+  erewrite PmatchDef1 ; [|reflexivity].
   reflexivity.
-  reflexivity.
-  exists 5.
-  split.
 Qed.
 
 Theorem testFunctionUsingMatch2 :
@@ -462,44 +451,17 @@ Proof.
   reflexivity.
 Qed.
 
-(* So this works on some level. But how can this be automated usefully? *)
+Ltac evaluate_function solve_tactic :=
+  repeat (
+      rewrite ?runProgDefinitionRet, ?runProgDefinitionRec, ?bindDef2;
+      try (erewrite PmatchDef1 ; [|solve [solve_tactic]]);
+      try (erewrite PmatchDef2 ; [|intros; solve [solve_tactic]])
+    ).
 
-(* Duh this is how it should be: *)
-Theorem PmatchDef1' {T A : Type} {P : T -> Prop} {t : T} (H : P t)
-        (unique : forall t1 t2, P t1 -> P t2 -> t1 = t2)
-        (branch1 : T -> Partial A) (branch2 : Partial A)
-  : Pmatch P unique branch1 branch2 = branch1 t.
-Proof.
-  apply partialEq2.
-  extensionality a.
-  apply propositional_extensionality.
-  split.
-  - intros.
-    destruct H0.
-    + destruct H0.
-      simpl.
-      destruct H0.
-      specialize (unique _ _ H H0).
-      subst.
-      apply H1.
-    + destruct H0.
-      exfalso.
-      apply H0.
-      exists t.
-      assumption.
-  - intros.
-    simpl.
-    apply or_introl.
-    eexists.
-    split.
-    apply H.
-    apply H0.
-Qed.
-
-Theorem testFunctionUsingMatch1' :
-  functionUsingMatch [0 ; 5] = Preturn 5.
+Theorem testFunctionUsingMatch2' :
+  functionUsingMatch [1 ; 5] = Preturn 0.
 Proof.
   unfold functionUsingMatch.
-  erewrite PmatchDef1' ; [|reflexivity].
+  evaluate_function easy.
   reflexivity.
 Qed.

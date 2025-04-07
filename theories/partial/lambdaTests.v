@@ -19,6 +19,8 @@ Require Import qterm.
 Require Import lambdaFacts.
 Require Import lambdaSolve.
 
+Require Import partial.
+
 Ltac solve_all := repeat (lambda_solve ; repeat neutral_inj_case ;lambda_solve
                   ; repeat fast_neutral_unequal_case). 
 
@@ -41,3 +43,36 @@ Proof.
   destruct x.
   solve_all.
 Qed. 
+
+(* I will test writing a partial function with match on Qterms
+   that sends (A x) => x  and otherwise B *)
+
+Check Pmatch.
+Definition test_function_1 (t : QTerm) : Partial QTerm.
+  refine (Pmatch (fun x => t = <A `x>) _ (fun x => Preturn x) (Preturn <B>)).
+  intros.
+  solve_all.
+Defined.
+
+Theorem run_test_function_1_1 : test_function_1 <A C> = Preturn <C>.
+Proof.
+  unfold test_function_1.
+  evaluate_function solve_all.
+  reflexivity.
+Qed.
+
+Theorem run_test_function_1_2 : test_function_1 <C> = Preturn <B>.
+Proof.
+  unfold test_function_1.
+  evaluate_function solve_all.
+  reflexivity.
+Qed.
+
+(*
+Ok, now a function which uses both match and general recursion
+f (A x) = B (f x)
+f C = D
+ *)
+
+Definition test_function_2 : QTerm -> Partial QTerm.
+  refine ().
