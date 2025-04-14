@@ -45,10 +45,15 @@ Proof.
 Qed. 
 
 (* I will test writing a partial function with match on Qterms
-   that sends (A x) => x  and otherwise B *)
+   that sends (A x) => x  and otherwise B
+
+  f (A x) = x
+  f _ = B
+*)
 
 Check Pmatch.
 Definition test_function_1 (t : QTerm) : Partial QTerm.
+  Check Pmatch.
   refine (Pmatch (fun x => t = <A `x>) _ (fun x => Preturn x) (Preturn <B>)).
   intros.
   solve_all.
@@ -71,8 +76,30 @@ Qed.
 (*
 Ok, now a function which uses both match and general recursion
 f (A x) = B (f x)
-f C = D
+f _ = D
  *)
 
 Definition test_function_2 : QTerm -> Partial QTerm.
-  refine ().
+  Check runProg.
+  refine (runProg (fun t =>
+                     Pmatch (fun x => t = <A `x>) _
+                            (fun x => Preturn (Rec _ _ x (fun res => Ret _ _ (Preturn <B `res>))))
+                            (Preturn (Ret _ _ (Preturn <D>))))).
+  intros.
+  solve_all.
+Defined.
+
+Theorem run_test_function_2_1 : test_function_2 <A (A C)> = Preturn <B (B D)>.
+Proof.
+  unfold test_function_2.
+  unfold runProg.
+  evaluate_function solve_all.
+  reflexivity.
+Qed.
+
+Theorem something_bad : test_function_1 <C> = Preturn <B>.
+Proof.
+  unfold test_function_1, runProg.
+  evaluate_function solve_all.
+  easy.
+Qed.  

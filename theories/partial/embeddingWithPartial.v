@@ -2,6 +2,7 @@ Require Import String.
 Require Import qterm.
 Require Import lambdaFacts.
 Require Import lambdaSolve.
+Require Import partial.
 
 (*
 Here I will use the library to define dependent type theory.
@@ -89,6 +90,35 @@ Proof.
   unfold_all.
   lambda_solve.
 Qed.
+Inductive Empty_type : Type :=.
+
+Definition False_elim {T : Type} : False -> T := fun x => match x with end.
+Definition In : QTerm -> Partial (QTerm -> Prop).
+  Check runProg2.
+  Check Pmatch.
+  Check Empty_type.
+
+  (* I think that runProg2 isn't even strong enough (although it is possible to do)
+   In the case "[Pi A B] = {f | forall a, [A] a -> [B a] (f a)}"
+   We need to recur on all (B a) such that [A] a. In other words, in order to even
+   construct the set of terms on which we recur, we need to already have recurred once.
+   I could fix this by combining the Prog datatype with the idea from runProg2.
+   But things are already getting unreadable, it is not very appealing. *)
+  refine (runProg2 (fun t =>
+              Pmatch (fun _ : unit => t = <Bool>)
+                     _ (fun _ => Preturn (existT _ (False : Type) (False_elim , fun _ =>
+                               Preturn (fun b => b = <fun x => proj1 x> \/ b = <fun x => proj2 x>))))
+                     (Pmatch (fun AB : QTerm * QTerm => match AB with (A , B) => t = <Pi `A `B> end)
+                             _ (fun AB => match AB with (A , B) =>
+                                   Preturn (existT _ (unit + {a | })) end)
+                             _)
+         )).
+
+
+
+
+
+
 
 Inductive In': QTerm -> (QTerm -> Prop) -> Prop:=
 | in_Pi : forall (S : QTerm -> Prop) (F : forall a, (*S a ->*) QTerm -> Prop) A B,

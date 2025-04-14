@@ -194,15 +194,17 @@ Inductive Prog (A B : Type) : Type :=
 | Rec : A -> (B -> Prog A B) -> Prog A B (* TODO: The input should be Partial A instead of just A *)
 .
 
-Inductive runProgR {A B : Type} (def : A -> Prog A B) : Prog A B -> Partial B -> Prop :=
+(*TODO : could this inductive have just a B parameter instead of Partial B? *)
+Inductive runProgR {A B : Type} (def : A -> Partial (Prog A B)) : Prog A B -> Partial B -> Prop :=
 | retR : forall b, runProgR def (Ret _ _ b) b
-| recR : forall a b res rest,
-    runProgR def (def a) (Preturn b)
+| recR : forall a b res rest defa,
+    def a = Preturn defa
+    -> runProgR def defa (Preturn b)
     -> runProgR def (rest b) res
     -> runProgR def (Rec _ _ a rest) res
 .
 
-Theorem runProgFunction {A B : Type} {def : A -> Prog A B} {p : Prog A B} {b1 b2 : Partial B}
+Theorem runProgFunction {A B : Type} {def : A -> Partial (Prog A B)} {p : Prog A B} {b1 b2 : Partial B}
   (rp1 : runProgR def p b1) (rp2 : runProgR def p b2) : b1 = b2.
 Proof.
   intros.
@@ -219,13 +221,16 @@ Proof.
     inversion rp2.
     subst.
     apply IHrp1_2.
-    specialize (IHrp1_1 _ H1).
+    rewrite H in H2.
+    apply PreturnInj in H2.
+    subst.
+    specialize (IHrp1_1 _ H3).
     apply PreturnInj in IHrp1_1.
     subst.
     assumption.
 Qed.
 
-Definition runProgImpl {A B : Type} (def : A -> Prog A B) (p : Prog A B) : Partial B.
+Definition runProgImpl {A B : Type} (def : A -> Partial (Prog A B)) (p : Prog A B) : Partial B.
   refine (exist _ (fun b => runProgR def p (Preturn b)) _).
   intros.
   assert (eq := runProgFunction H H0).
@@ -233,10 +238,11 @@ Definition runProgImpl {A B : Type} (def : A -> Prog A B) (p : Prog A B) : Parti
   assumption.
 Defined.
 
-Definition runProg {A B : Type} (def : A -> Prog A B) (a : A) : Partial B :=
-  runProgImpl def (def a).
+Definition runProg {A B : Type} (def : A -> Partial (Prog A B)) (a : A) : Partial B :=
+  Pbind (def a) (fun a' => 
+                   runProgImpl def a').
 
-Theorem runProgDefinitionRet {A B : Type} (def : A -> Prog A B) (b : Partial B)
+Theorem runProgDefinitionRet {A B : Type} (def : A -> Partial (Prog A B)) (b : Partial B)
   : runProgImpl def (Ret _ _ b) = b.
 Proof.
   destruct b.
@@ -258,10 +264,11 @@ Proof.
     (* TODO: would this proof be simpler with definition proof irrelevance? *)
 Qed.
 
-Theorem runProgDefinitionRec {A B : Type} {def : A -> Prog A B} {a : A} {rest : B -> Prog A B}
+Theorem runProgDefinitionRec {A B : Type} {def : A -> Partial (Prog A B)} {a : A} {rest : B -> Prog A B}
   : runProgImpl def (Rec _ _ a rest) =
-      Pbind (runProgImpl def (def a)) (fun b =>
-          runProgImpl def (rest b)).
+      Pbind (def a) (fun a' =>
+      Pbind (runProgImpl def a') (fun b =>
+          runProgImpl def (rest b))).
 Proof.
   apply partialEq.
   apply functional_extensionality.
@@ -271,27 +278,43 @@ Proof.
   - intros.
     inversion H.
     subst.
+    exists defa.
+    split.
+    rewrite H2.
+    reflexivity.
     exists b0.
     split.
-    apply H2.
-    apply H4.
+    apply H3.
+    apply H5.
   - intros.
     destruct H.
     destruct H.
-    apply (@recR _ _ _ _ x).
-    assumption.
-    assumption.
+    destruct H0.
+    destruct H0.
+
+    Check recR.
+    assert (def a = Preturn x). {
+      induction (def a).
+      apply itIsReturn.
+      simpl in H.
+      assumption.
+    }
+    eapply (@recR _ _ _ _ _ _ _ x H2).
+    simpl in H0, H1.
+    apply H0.
+    apply H1.
 Qed.
 
-Definition facProg : nat -> Prog nat nat :=
-  fun n => match n with
+Definition facProg : nat -> Partial (Prog nat nat) :=
+  fun n => Preturn (match n with
            | O => Ret _ _ (Preturn 1)
            | S n' => Rec _ _ n' (fun x => Ret _ _ (Preturn (n * x)))
-           end.
+           end).
 
 Definition factorial : nat -> Partial nat :=
   runProg facProg.
 
+(*
 Theorem factorialTest1 : factorial 1 = Preturn 1.
 Proof.
   unfold factorial, runProg.
@@ -303,7 +326,7 @@ Proof.
   rewrite runProgDefinitionRet.
   reflexivity.
 Qed.
-
+*)
 Theorem factorialTest3 : factorial 6 = Preturn 720.
 Proof.
   unfold factorial, runProg, facProg.
@@ -465,3 +488,173 @@ Proof.
   evaluate_function easy.
   reflexivity.
 Qed.
+
+(*
+A version of general recursion which allows for infinitely many recursive calls for a single input,
+so long as they are all defined
+*)
+Check existT.
+Print prod.
+Inductive runProgR2 {A B : Type} (def : A -> Partial {T : Type & prod (T -> A) ((T -> B) -> Partial B)})
+  : A -> B -> Prop :=
+| callR2 : forall a T args cont (rec : T -> B) b, (*Or should it be rec : A -> B ?*)
+    def a = Preturn (existT _ T (pair args cont))
+    -> (forall t, runProgR2 def (args t) (rec t))
+    -> cont rec = Preturn b
+    -> runProgR2 def a b
+.
+
+
+(*This section is from https://proofassistants.stackexchange.com/questions/4696/how-to-extract-the-equality-between-the-second-projection-in-an-existential-in-c*)
+(* TODO: Is there really no easier way? Does this really require UIP? *)
+Section existT_inj2_uip.
+  Variables (A : Type) (P : A -> Type).
+
+  Implicit Type (x : A).
+  Print sigT.
+
+  Theorem exist_inj2_helper x (px : P x) (y : sigT P) :
+      @existT _ _ x px = y
+    -> exists e : x = projT1 y, eq_rect x P px _ e = projT2 y.
+  Proof using Type. intros []; exists eq_refl; auto. Qed.
+
+  Fact exists_inj2 x y (px : P x) (py : P y) :
+      existT _ x px = existT _ y py
+    -> exists e : x = y, eq_rect x P px _ e = py.
+  Proof using Type. intros (e & ?)%exist_inj2_helper. exists e; subst; simpl; auto. Qed.
+
+  Fact exist_inj2_uip :
+    forall x (p1 p2 : P x), existT _ x p1 = existT _ x p2 -> p1 = p2.
+  Proof using Type.
+    intros x p1 p2 (e & He)%exists_inj2.
+    rewrite (UIP _ _ _ e eq_refl) in He.
+    assumption.
+  Qed.
+End existT_inj2_uip.
+
+Require Import Coq.Logic.EqdepFacts.
+
+Theorem runProg2Function {A B : Type}
+        (def : A -> Partial {T : Type & prod (T -> A) ((T -> B) -> Partial B)})
+        (a : A)
+        (b1 b2 : B)
+        (H1 : runProgR2 def a b1)
+        (H2 : runProgR2 def a b2)
+  : b1 = b2.
+Proof.
+  intros.
+  generalize H2.
+  generalize b2.
+  clear H2.
+  clear b2.
+  induction H1.
+  intros.
+  inversion H3.
+  subst.
+  rewrite H in H4.
+  clear H.
+  apply PreturnInj in H4.
+  inversion H4.
+  clear H4.
+  subst.
+  Check f_equal.
+
+  apply exist_inj2_uip in H9.
+  apply exist_inj2_uip in H8.
+  subst.
+  assert (rec = rec0). {
+    extensionality t.
+    apply H1.
+    apply H5.
+  }
+  subst.
+  rewrite H2 in H6.
+  apply PreturnInj.
+  assumption.
+Qed.
+
+Definition runProg2 {A B : Type}
+           (def : A -> Partial {T : Type & prod (T -> A) ((T -> B) -> Partial B)})
+           (a : A)
+  : Partial B.
+  refine (exist _ (fun b => runProgR2 def a b) _).
+  (* prove that runProgR2 is a function *)
+  apply runProg2Function.
+Defined.
+
+(* Is there a better form for this that doesn't require the user to find rec? *)
+Theorem runProg2Definition (A B : Type) (T : Type) (args : T -> A) (cont : (T -> B) -> Partial B)
+        (def : A -> Partial {T : Type & prod (T -> A) ((T -> B) -> Partial B)})
+        (a : A)
+        (defa : def a = Preturn (existT _ T (pair args cont)))
+        (rec : T -> B)
+        (recCallsAreDefined : forall t, runProg2 def (args t) = Preturn (rec t))
+  : runProg2 def a = cont rec.
+Proof.
+  apply partialEq2.
+  simpl.
+  extensionality b.
+  apply propositional_extensionality.
+  split.
+  - intros H.
+    destruct H.
+    rewrite defa in H.
+    apply PreturnInj in H.
+    inversion H.
+    clear H.
+    subst.
+    apply exist_inj2_uip in H4.
+    subst.
+    apply exist_inj2_uip in H5.
+    subst.
+
+    assert (rec = rec0). {
+      extensionality t.
+      specialize (recCallsAreDefined t).
+      specialize (H0 t).
+      Check f_equal.
+      apply (@f_equal _ _ (@proj1_sig _ _)) in recCallsAreDefined.
+      simpl in recCallsAreDefined.
+      apply (@f_equal _ _ (fun f => f (rec t))) in recCallsAreDefined.
+      assert (runProgR2 def (args0 t) (rec t)). {
+        rewrite recCallsAreDefined.
+        reflexivity.
+      }
+      Check runProg2Function.
+      apply eq_sym.
+      apply (runProg2Function def (args0 t) _ _ H0 H).
+    }
+    subst.
+    rewrite H1.
+    simpl.
+    reflexivity.
+  - intros H.
+    Print runProgR2.
+    Check callR2.
+    eapply callR2.
+    apply defa.
+    intros.
+    specialize (recCallsAreDefined t).
+    apply (@f_equal _ _ (@proj1_sig _ _)) in recCallsAreDefined.
+    apply (@f_equal _ _ (fun f => f (rec t))) in recCallsAreDefined.
+    simpl in recCallsAreDefined.
+    assert (runProgR2 def (args t) (rec t)). {
+        rewrite recCallsAreDefined.
+        reflexivity.
+    }
+    apply H0.
+    apply partialEq2.
+    simpl.
+    extensionality y.
+    apply propositional_extensionality.
+    split.
+    + intros.
+      apply (proj2_sig (cont rec)).
+      assumption.
+      assumption.
+    + intros.
+      subst.
+      assumption.
+Qed.
+    
+    
