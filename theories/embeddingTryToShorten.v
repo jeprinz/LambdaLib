@@ -52,9 +52,7 @@ Inductive Typed : QTerm -> QTerm -> QTerm -> Prop :=
     Typed ctx <`subLast `T `true> t1 ->
     Typed ctx <`subLast `T `false> t2 ->
     Typed ctx <`subLast `T `cond> <`ifexpr `cond `t1 `t2>
-(*
 | ty_Empty : forall ctx, Typed ctx <`U> Empty
- *)
 | ty_Bool : forall ctx, Typed ctx <`U> Bool
 | ty_pi : forall ctx A B,
     Typed ctx <`U> A
@@ -192,6 +190,14 @@ Proof.
         apply In_Tfalse_S0.
       * normalize.
         apply S0_t1.
+  (* Empty *)
+  - intros.
+    eexists.
+    solve_all.
+    split.
+    + apply in_type.
+    + eexists.
+      apply in_Empty.
   (* Bool *)
   - intros.
     eexists.
