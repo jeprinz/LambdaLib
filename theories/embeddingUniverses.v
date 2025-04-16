@@ -13,10 +13,12 @@ Definition succ := <fun x => fun env => x (proj1 env)>.
 
 Definition lzero := <lzero>.
 Definition lsuc := <lsuc>.
+(* Should I have an explicit type level on the pis? *)
 Definition pi := <fun x => fun y => fun env => Pi (x env) (fun a => y (env , a))>.
-Definition U : QTerm := <fun env => U>.
+Definition U : QTerm := <fun lvl => fun env => U lvl>.
 Definition Empty := <fun env => Empty>.
 Definition Bool := <fun env => Bool>.
+Definition Lift := <fun T => fun env => Lift T>.
 
 Definition var_to_term := <fun x => x>.
 Definition lambda := <fun t => fun env => fun a => t (env , a)>.
@@ -39,8 +41,8 @@ Inductive VarTyped : QTerm -> QTerm -> QTerm -> Prop :=
                               -> VarTyped <`cons `ctx `T> <`weaken `A> <`succ `s>.
 
 Inductive Typed : QTerm -> QTerm -> QTerm -> Prop :=
-| ty_lambda : forall ctx A B s,
-    Typed ctx <`U> <`pi `A `B> ->
+| ty_lambda : forall ctx A B s lvl,
+    Typed ctx <`U `lvl> <`pi `A `B> ->
     Typed <`cons `ctx `A> B s -> Typed ctx <`pi `A `B> <`lambda `s>
 | ty_app : forall ctx A B s1 s2, Typed ctx <`pi `A `B> s1 -> Typed ctx A s2
                                  -> Typed ctx <`subLast `B `s2> <`app `s1 `s2>
@@ -52,11 +54,14 @@ Inductive Typed : QTerm -> QTerm -> QTerm -> Prop :=
     Typed ctx <`subLast `T `true> t1 ->
     Typed ctx <`subLast `T `false> t2 ->
     Typed ctx <`subLast `T `cond> <`ifexpr `cond `t1 `t2>
-| ty_Empty : forall ctx, Typed ctx <`U> Empty
-| ty_Bool : forall ctx, Typed ctx <`U> Bool
-| ty_pi : forall ctx A B,
-    Typed ctx <`U> A
-    -> Typed <`cons `ctx `A> <`U> B -> Typed ctx <`U> <`pi `A `B>.
+| ty_Empty : forall ctx, Typed ctx <`U `lzero> Empty
+| ty_Bool : forall ctx, Typed ctx <`U `lzero> Bool
+| ty_pi : forall ctx A B lvl,
+    Typed ctx <`U `lvl> A
+    -> Typed <`cons `ctx `A> <`U `lvl> B -> Typed ctx <`U `lvl> <`pi `A `B>
+| ty_U : forall ctx lvl,
+    Typed ctx <`U (`lsuc `lvl)> <`U lvl>
+.
 
 Ltac solve_no_unfold := repeat (lambda_solve ; repeat neutral_inj_case ;lambda_solve
                   ; repeat fast_neutral_unequal_case). 
