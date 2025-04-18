@@ -17,7 +17,7 @@ Definition pi := <fun x => fun y => fun env => Pi (x env) (fun a => y (env , a))
 Definition U : QTerm := <(*fun lvl => *)fun env => U (*lvl*)>.
 Definition Empty := <fun env => Empty>.
 Definition Bool := <fun env => Bool>.
-Definition Lift := <fun T => fun env => Lift T>.
+Definition Lift := <fun T => fun env => Lift (T env)>.
 
 Definition var_to_term := <fun x => x>.
 Definition lambda := <fun t => fun env => fun a => t (env , a)>.
@@ -30,7 +30,7 @@ Definition weaken := <fun t => fun env => t (proj1 env)>.
 Definition subLast := <fun t => fun toSub => fun env => t (env , toSub env)>.
 
 Ltac unfold_all := unfold nil, cons, zero, succ, pi, U, Bool, Empty, var_to_term, lambda,
-    app, weaken, subLast, level, true, false, ifexpr in *.
+    app, weaken, subLast, level, true, false, ifexpr, Lift in *.
 
 (* The deeper shallow embedding *)
 
@@ -59,7 +59,11 @@ Inductive Typed : (*context*) QTerm -> (*level*) nat -> (*Type*) QTerm -> (*Term
     Typed ctx (S lvl) <`U(*{const lvl}*)> A
     (* TODO: is S lvl correct below? *)
     -> Typed <`cons `ctx {const lvl} `A> (S lvl) <`U(*{const lvl}*)> B -> Typed ctx (S lvl) <`U(*{const lvl}*)> <`pi `A `B>
-| ty_U : forall ctx lvl, Typed ctx (S (S lvl)) <`U(*{const (S lvl)}*)> <`U(*{const lvl}*)>.
+| ty_U : forall ctx lvl, Typed ctx (S (S lvl)) <`U(*{const (S lvl)}*)> <`U(*{const lvl}*)>
+| ty_Lift : forall ctx lvl T, Typed ctx (S lvl) <`U> T -> Typed ctx (S (S lvl)) <`U> <`Lift `T>
+| ty_lift : forall ctx lvl T t, Typed ctx lvl T t -> Typed ctx (S lvl) <`Lift `T> t
+| ty_lower : forall ctx lvl T t, Typed ctx (S lvl) <`Lift `T> t -> Typed ctx lvl T t
+.
 
 Ltac solve_no_unfold := repeat (lambda_solve ; repeat neutral_inj_case ;lambda_solve
                   ; repeat fast_neutral_unequal_case). 
@@ -67,41 +71,54 @@ Ltac solve_no_unfold := repeat (lambda_solve ; repeat neutral_inj_case ;lambda_s
 Ltac solve_all := repeat (unfold_all ; lambda_solve ; repeat neutral_inj_case ;lambda_solve
                           ; repeat fast_neutral_unequal_case).
 
-Inductive In' (I : QTerm -> Prop) : QTerm -> (QTerm -> Prop) -> Prop:=
+Inductive In' (Prev : QTerm -> (QTerm -> Prop) -> Prop) : QTerm -> (QTerm -> Prop) -> Prop:=
 | in_Pi : forall (s : QTerm -> Prop) (F : QTerm -> (QTerm -> Prop)) A B,
-    In' I A s
-    -> (forall a, s a -> In' I <`B `a> (F a))
-    -> In' I <Pi `A `B> (fun f => forall a (s : s a), F a <`f `a>)
-| in_Bool :  In' I <Bool> (fun b => b = <fun x => proj1 x> \/ b = <fun x => proj2 x>)
-| in_Empty : In' I <Empty> (fun _ => False)
+    In' Prev A s
+    -> (forall a, s a -> In' Prev <`B `a> (F a))
+    -> In' Prev <Pi `A `B> (fun f => forall a (s : s a), F a <`f `a>)
+| in_Bool :  In' Prev <Bool> (fun b => b = <fun x => proj1 x> \/ b = <fun x => proj2 x>)
+| in_Empty : In' Prev <Empty> (fun _ => False)
 (* TODO: Put lvl in type? or get rid of them? *)
-| in_type : In' I <U> I.
+| in_type : In' Prev <U> (fun T => exists S, Prev T S)
+(* TODO: Lift type. Something like: *)
+| in_Lift : forall T S, Prev T S -> In' Prev <Lift `T> S
+.
 
 (* In (S n) represents the interperetation of a type at level n *)
 Fixpoint In (lvl : nat) : QTerm -> (QTerm -> Prop) -> Prop :=
   match lvl with
   | O => fun _ _ => False (* TODO: Is this how I want to do it? *)
-  | S lvl' => In' (fun T => exists S, In lvl' T S)
+  | S lvl' => In' (In lvl')
   end.
 
 Theorem In_function : forall lvl T S1 S2, In lvl T S1 -> In lvl T S2 -> S1 = S2.
 Proof.
-  intros lvl T S1 S2 in1.
-  generalize dependent S2.
-  destruct lvl.
-  - inversion in1.
+  intros lvl.
+  induction lvl.
+  - intros.
+    inversion H0.
   -
-    (* All cases other than Pi X Pi can be dealt with trivially*)
+    intros T S1 S2 in1.
+    intros.
+    generalize dependent S2.
+    (* Most cases can be dealt with trivially*)
     induction in1; try(intros; inversion H; solve_all; fail).
-    intros S2 in2.
-    inversion in2; solve_all.
-    subst.
-    rewrite <- (IHin1 s0 H2) in *.
-    extensionality f.
-    extensionality a.
-    extensionality Sa.
-    rewrite (H0 a Sa (F0 a) (H3 a Sa)).
-    reflexivity.
+    (* Pi X Pi case *)
+    + intros S2 in2.
+      inversion in2; solve_all.
+      subst.
+      rewrite <- (IHin1 s0 H2) in *.
+      extensionality f.
+      extensionality a.
+      extensionality Sa.
+      rewrite (H0 a Sa (F0 a) (H3 a Sa)).
+      reflexivity.
+    (* Lift X Lift case *)
+    + intros.
+      inversion H0; solve_all.
+      subst.
+      specialize (IHlvl _ _ _ H H2).
+      auto.
 Qed.
 
 Inductive InCtx : QTerm -> QTerm -> Prop :=
@@ -145,7 +162,7 @@ Proof.
   - intros env inctx.
     specialize (IHTyped1 env inctx) as [SPIAB [inPiAB s1Elem]].
     specialize (IHTyped2 env inctx) as [SA [inA s2Elem]].
-    inversion inPiAB as [SA' F A' B' In_A'_SA' In_B'a_F'a eq | | | ]; solve_all.
+    inversion inPiAB as [SA' F A' B' In_A'_SA' In_B'a_F'a eq | | | | ]; solve_all.
     subst.
     (*inversion in'PiAB as [ SA' F A' B' In_A'_SA' In_B'a_F'a eq | |]; solve_all; subst.*)
     replace SA' with SA in * by (symmetry; apply (In_function (S _) _ _ _ In_A'_SA' inA)).
@@ -258,6 +275,46 @@ Proof.
       unfold U.
       normalize.
       apply in_type.
+  (* Lift *)
+  - intros.
+    eexists.
+    specialize (IHTyped env H0) as [s [In_U_s T_in_s]].
+    split.
+    + Check in_type.
+
+      simpl.
+      Check in_type.
+      unfold U.
+      normalize.
+      apply in_type.
+    + simpl.
+
+      inversion In_U_s; solve_all; clear In_U_s; subst.
+      destruct T_in_s as [S InT].
+      exists S.
+      unfold Lift.
+      normalize.
+      apply in_Lift.
+
+      apply InT.
+  - intros.
+    specialize (IHTyped env H0) as [S [In_T In_S]].
+    exists S.
+    split.
+    + solve_all.
+      apply in_Lift.
+      apply In_T.
+    + apply In_S.
+  - intros.
+    specialize (IHTyped env H0) as [S [In_T In_S]].
+    exists S.
+    solve_all.
+    inversion In_T; try solve [solve_all].
+    subst.
+    split.
+    + solve_all.
+      apply H2.
+    + apply In_S.
 Qed.
      
 Theorem consistency : forall t, Typed nil 0 Empty t -> False.
