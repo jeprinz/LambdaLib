@@ -3,12 +3,6 @@ Require Import qterm.
 Require Import lambdaFacts.
 Require Import lambdaSolve.
 
-(*
-Here I will use the library to define dependent type theory.
-For now, I'll just do type : type.
-*)
-
-
 (* The shallow embedding. Ideally this would work with nice notations, but for now Definitions: *)
 
 Definition nil := <Nil>.
@@ -119,6 +113,7 @@ Search "bind".
 From stdpp Require Import option.
 Search "bind".
 Check option_bind.
+
 Inductive In: QTerm -> (QTerm -> Prop) -> Prop:=
 (*| in_Pi : forall (S : QTerm -> Prop) (F : forall a, (*S a ->*) QTerm -> Prop) A B,
     In A S
@@ -136,7 +131,54 @@ Inductive In: QTerm -> (QTerm -> Prop) -> Prop:=
     (forall a Fa, F a Fa -> In <`T `a> Fa)
     -> In <all `T> (fun f => forall a Fa, F a Fa -> Fa <`f `a>)
 | in_Empty : In <Empty> (fun _ => False)
+(* Test of thing that probably wont work: *)
+| in_all2 : forall T (F : QTerm -> (QTerm -> Prop)),
+    (forall (S : QTerm -> Prop), In <`T {Lambda.const S}> (F (Lambda.const S)))
+    -> In <all `T> (fun f => forall (S : QTerm -> Prop), F (Lambda.const S) <`f {Lambda.const S}>)
+| in_set : forall (S : QTerm -> Prop), In (Lambda.const S) S
 .
+
+Definition isItTheSame (t : QTerm) := In t (fun t' => t = t').
+(* Wait.. how does that work? *)
+
+(*
+Inductive Shouldn'tBePossible : Type :=
+| ctr1 : (Shouldn'tBePossible -> Prop) -> Shouldn'tBePossible
+.
+ *)
+
+Inductive SBP : Type :=
+| ctr2 : forall {T : Type}, T -> SBP.
+Axiom thing : SBP -> Prop.
+(* It doesn't let me do this: *)
+Fail Definition isPossible := ctr2 thing.
+
+(* So why does it let me do this: *)
+Axiom thing2 : QTerm -> Prop.
+Definition isPossible2 := Lambda.const thing2.
+
+(* It must be some sort of cheat that is accidentally allowed by the definition of quotients?
+ is it allowed in the original un-quotiented term type? *)
+
+Require Import term.
+Axiom thing3 : Term -> Prop.
+Check constant.
+Fail Definition isPossible3 := constant thing3.
+
+(*Ok, so yes it is the quotient type somehow accidentally allowing a thing that
+  shouldn't be allowed. *)
+(*
+IDEA: Maybe its fine, because terms and types are completely separate.
+In other words, I can have two copies of QTerm, one at level 0 and the other at level 1.
+The types are at level 1, and can contain sets of terms at level 0.
+ *)
+(*
+Even if that works, another issue is how the induction in the fundamental lemma will go through.
+Maybe the environment will have to say that for each type we have a set of terms?
+Because the induction needs to correctly capture the idea of substituting these sets
+into the types.
+*)
+
 Axiom hole : forall {T : Type}, T.
 
 Require Import FunctionalExtensionality.

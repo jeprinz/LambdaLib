@@ -147,6 +147,7 @@ Ltac lambda_solve_step :=
       | H : lam ?s1 ?t1 = lam ?s2 ?t2 |- _ => rewrite (@alpha s1 s2 t1) in H; compute_subst_in H
       | |- lam ?s1 ?t1 = lam ?s2 ?t2 => rewrite (@alpha s1 s2 t1); compute_subst
       | H : var ?s1 0 = var ?s2 0 |- _ => apply varInj in H
+      | H : const ?t1 = const ?t2 |- _ => apply constInj in H
       | H : @eq string ?s ?s |- _ => clear H
       | H : @eq string ?s1 ?s2 |- _ => inversion H
       | H : @eq QTerm (pair ?t1 ?t2) (pair ?t1' ?t2') |- _ => apply pairInj in H; destruct H

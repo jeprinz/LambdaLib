@@ -74,6 +74,8 @@ Inductive In : QTerm -> (QTerm -> Prop) -> Prop :=
 | in' : forall T S, In' T S -> In T S
 | in_type : In <U> (fun T => exists S, In' T S).
 
+
+
 Theorem In_function : forall T S1 S2, In T S1 -> In T S2 -> S1 = S2.
 Proof with (try (intros; inversion H; inversion H0; solve_all; reflexivity; fail)).
   intros T S1 S2 in1.

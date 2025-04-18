@@ -20,7 +20,7 @@ Ltac normalize H := repeat (rewrite beta in H; compute_subst H).
 
 Inductive PseudoNeutral : QTerm -> Prop :=
 | neu_var : forall {n i}, PseudoNeutral (var n i)
-| neu_const : forall {s}, PseudoNeutral (const s)
+| neu_const : forall {T} {s : T}, PseudoNeutral (const s)
 | neu_app : forall {t1 t2}, PseudoNeutral t1 -> PseudoNeutral (app t1 t2).
 
 Theorem lamInj : forall t1 t2 s, <fun `s => `t1> = <fun `s => `t2> -> t1 = t2.
@@ -35,6 +35,9 @@ Proof.
   repeat rewrite subst_id in H0.
   assumption.
 Qed.
+
+(* TODO: For now, this will be an axiom. Later I will prove from confluence hopefully *)
+Axiom constInj : forall {T : Type} (t1 t2 : T), const t1 = const t2 -> t1 = t2.
 
 (*Theorem varInj : forall s1 s2 i j, var s1 i = var s2 j -> s1 = s2 /\ i = j.*)
 Theorem varInj : forall s1 s2, var s1 0 = var s2 0 -> s1 = s2.

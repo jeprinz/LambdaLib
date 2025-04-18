@@ -27,14 +27,14 @@ Module Type LambdaSpec.
   Parameter pair : QTerm -> QTerm -> QTerm.
   Parameter pi1 : QTerm -> QTerm.
   Parameter pi2 : QTerm -> QTerm.
-  Parameter const : string -> QTerm.
+  Parameter const : forall {T : Type}, T -> QTerm.
 
   Parameter lift_lam : forall (s1 s2 : string) (i : nat) (t : QTerm),
       lift s1 i (lam s2 t) = lam s2 (lift s1 (if eqb s1 s2 then S i else i) t).
   Parameter lift_app : forall s i t1 t2, lift s i (app t1 t2) = app (lift s i t1) (lift s i t2).
   Parameter lift_var : forall (s1 s2 : string) (i k : nat),
       lift s1 k (var s2 i) = (if andb (s1 =? s2)%string (negb (Nat.ltb i k)) then var s2 (S i) else var s2 i).
-  Parameter lift_const : forall s1 s2 i , lift s1 i (const s2) = const s2.
+  Parameter lift_const : forall s {T : Type} (t : T) i , lift s i (const t) = const t.
   Parameter lift_pair : forall s i t1 t2, lift s i (pair t1 t2) = pair (lift s i t1) (lift s i t2).
   Parameter lift_pi1 : forall s i t, lift s i (pi1 t) = pi1 (lift s i t).
   Parameter lift_pi2 : forall s i t, lift s i (pi2 t) = pi2 (lift s i t).
@@ -50,7 +50,7 @@ Module Type LambdaSpec.
      if String.eqb s1 s2
         then if Nat.ltb k i then var s2 (i - 1) else if Nat.eqb i k then toSub
         else var s2 i else var s2 i.
-  Parameter subst_const : forall s1 s2 i t, subst s1 i t (const s2) = const s2.
+  Parameter subst_const : forall s {T : Type} (x : T) i t, subst s i t (const x) = const x.
   Parameter subst_pair : forall s i t t1 t2,
       subst s i t (pair t1 t2) = pair (subst s i t t1) (subst s i t t2).
   Parameter subst_pi1 : forall s i t1 t2, subst s i t1 (pi1 t2) = pi1 (subst s i t1 t2).
@@ -97,7 +97,7 @@ Definition subst s i := QTerm.map2 (subst s i) (subst_cong s i).
 Definition pair := QTerm.map2 pair pair_cong.
 Definition pi1 := QTerm.map pi1 pi1_cong.
 Definition pi2 := QTerm.map pi2 pi2_cong.
-Definition const s := QTerm.mk (constant s).
+Definition const {T : Type} (s : T) := QTerm.mk (constant s).
 
 Check QTerm.sound.
 Check lift_lam.
@@ -251,7 +251,7 @@ Proof.
   apply lift_const.
 Qed.
 
-Theorem lift_const : forall s1 s2 i, lift s1 i (const s2) = const s2.
+Theorem lift_const : forall s {T : Type} (t : T) i, lift s i (const t) = const t.
 Proof.
   intros.
   apply lift_internal_const.
@@ -266,7 +266,7 @@ Proof.
   apply subst_const.
 Qed.
 
-Theorem subst_const : forall s1 s2 i t, subst s1 i t (const s2) = const s2.
+Theorem subst_const : forall s {T : Type} (x : T) i t, subst s i t (const x) = const x.
 Proof.
   unfold const.
   intros.
@@ -484,26 +484,5 @@ Compute <fun y => fun z => y (fun x => x y)>.
 Definition metavar_example: QTerm. exact <fun x => x>. Qed.
 Compute <fun x => x `metavar_example x>.
 
-
-(* Notations for subst and lift *)
-(*
-Notation "t1 [ s @ i / t2 ]" := (subst s i t2 t1) (at level 40).
-Notation "t1 [ s / t2 ]" := (subst s 0 t2 t1) (at level 40, s at level 10).
-Notation "t1 [ s ]" := (lift s t1) (at level 40).
-*)
-(*
-Definition var_coerce (s : string) := var s 0.
-Coercion var_coerce : string >-> QTerm.
-Arguments var_coerce _%_string.
-*)
-
-Check beta.
-Check eta.
-Check alpha.
-Check lift_app.
-
-(* So there is an issue where I need to hide the definitions.
-Maybe make a module? *)
-Compute <fun x => fun y => x y y>.
- 
-Compute <pi2 (a , b)>.
+Notation "{ x }" := x (in custom term_term at level 0, x constr).
+Compute <fun x => {const 10}>.

@@ -16,7 +16,7 @@ Inductive Constant :=
 | pi1c : Constant
 | pi2c : Constant
 | pairc : Constant
-| stringc : string -> Constant.
+| anyc : forall {T : Type}, T -> Constant.
 
 Inductive Term : Type :=
 | lam : string -> Term -> Term
@@ -30,7 +30,7 @@ Inductive Term : Type :=
 Definition pair t1 t2 := (app (app (const pairc) t1) t2).
 Definition pi1 t := app (const pi1c) t.
 Definition pi2 t := app (const pi2c) t.
-Definition constant (s : string) : Term := const (stringc s).
+Definition constant {T : Type} (t : T) : Term := const (anyc t).
 
 Inductive convertible : Term -> Term -> Prop :=
 | alpha : forall s1 s2 t, convertible (lam s1 t) (lam s2 (subst s1 0 (var s2 0) (lift s2 0 t)))
