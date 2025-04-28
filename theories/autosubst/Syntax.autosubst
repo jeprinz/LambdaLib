@@ -1,0 +1,19 @@
+tm : Type
+ctx : Type
+nat : Type
+
+nil : ctx
+cons : ctx -> nat -> tm -> ctx
+
+pi : tm -> (bind tm in tm) -> tm
+U : tm
+Empty : tm
+Bool : tm
+Lift : tm -> tm
+
+var : nat -> tm
+lambda : (bind tm in tm) -> tm
+app : tm -> tm -> tm
+true : tm
+false : tm
+ifexpr : tm -> tm -> tm -> tm
