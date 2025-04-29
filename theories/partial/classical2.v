@@ -131,6 +131,17 @@ Proof.
   (*I don't think so*)
 Abort.
 
+Theorem sortOfThough (P : Prop) : Classical P -> ~~P.
+Proof.
+  intros.
+  intros np.
+  destruct X as [S [unique nonempty]].
+  apply nonempty.
+  intros x Sx.
+  apply np.
+  apply x.
+Qed.
+
 Theorem thing (P : Prop) : ~ (~ (P \/ ~P)).
 Proof.
   intros n.
@@ -165,72 +176,12 @@ Defined.
 Theorem ind {T : Type} : forall (P : Classical T -> Prop),
     (forall (a : T), P (Preturn a)) -> forall (q : Classical T), (P q).
 Proof.
-  intros.
-  (*remember q as q'.*)
-  (* Maybe this might be possible? *)
-  destruct q as [S [unique nonempty]].
+Abort.
 
-  assert (q' = (Preturn a)). {
-    subst.
-    apply classicalEq.
-    extensionality a'.
-    apply propositional_extensionality.
-    split.
-    - intros.
-      symmetry.
-      apply property; assumption.
-    - intros.
-      subst.
-      assumption.
-  }
-  rewrite H0.
-  apply H.
-Qed.
-
-Definition choice {A B : Type} (R : A -> B -> Prop)
-      (Rfunction : forall a, exists! b, R a b)
-  : A -> Classical B.
-Proof.
-  intros a.
-  refine (exist _ (fun b => R a b) _).
-  specialize (Rfunction a) as [b property].
-  exists b.
-  assumption.
-Defined.
-
-Theorem choiceSpec (A B : Type) (R : A -> B -> Prop)
-        (Rfunction : forall a, exists! b, R a b)
-  : forall a, propBind (fun b => R a b) (choice R Rfunction a).
-Proof.
-  intros.
-  
-  
-Lemma lemmaThing (A : Type) (P : A -> Prop) (H : exists a, P a)
-  : exists (P' : A -> Prop), exists! a, P' a.
-Proof.
-  destruct H.
-  exists (fun a => a = x).
-  exists x.
-  split.
-  - reflexivity.
-  - intros.
-    congruence.
-Qed.
-
-Lemma doesThisWorkProbablyNot (A : Type) (thing : exists (P : A -> Prop), True) : A -> Prop.
-Proof.
-  intros.
-  
-
-Theorem indefiniteDescription (A : Type) (P : A -> Prop) (H : exists a, P a)
-  : Classical { a : A | P a }.
-Proof.
-  refine (exist _ (fun aPa => (proj1_sig aPa)) _).
-
+(*
 Definition Pif {A : Type} (P : Prop) (a1 a2 : Classical A) : Classical A.
   refine (exist _ (fun a => (P /\ proj1_sig a1 a) \/ ((not P) /\ proj1_sig a2 a)) _).
-  (* This doesn't seem to be possible.
-   But maybe it somehow can work by using Diaconescu's theorem? *)
+ *)
 
 (*
 Theorem PifDef1 : forall (A : Type) P (a1 a2 : A), P -> Pif P a1 a2 = Preturn a1.
@@ -277,4 +228,129 @@ Proof.
     reflexivity.
 Qed.
 *)
+(* We do need partiality for general recursion. Will this work? *)
+Definition Partial (T : Type) : Type := Classical (option T).
+  
+Inductive Prog (A B : Type) : Type :=
+| Ret : Partial B -> Prog A B
+| Rec : A -> (B -> Prog A B) -> Prog A B (* TODO: The input should be Partial A instead of just A *)
+.
+
+(*TODO : could this inductive have just a B parameter instead of Partial B? *)
+Inductive runProgR {A B : Type} (def : A -> Partial (Prog A B)) : Prog A B -> Partial B -> Prop :=
+| retR : forall b, runProgR def (Ret _ _ b) b
+| recR : forall a b res rest defa,
+    def a = Preturn (Some defa)
+    -> runProgR def defa (Preturn (Some b))
+    -> runProgR def (rest b) res
+    -> runProgR def (Rec _ _ a rest) res
+.
+
+Theorem runProgFunction {A B : Type} {def : A -> Partial (Prog A B)} {p : Prog A B} {b1 b2 : Partial B}
+  (rp1 : runProgR def p b1) (rp2 : runProgR def p b2) : b1 = b2.
+Proof.
+  intros.
+  generalize rp2.
+  generalize b2.
+  clear rp2.
+  clear b2.
+  induction rp1.
+  - intros.
+    inversion rp2.
+    subst.
+    reflexivity.
+  - intros.
+    inversion rp2.
+    subst.
+    apply IHrp1_2.
+    rewrite H in H2.
+    apply PreturnInj in H2.
+    subst.
+    inversion H2.
+    subst.
+    specialize (IHrp1_1 _ H3).
+    apply PreturnInj in IHrp1_1.
+    subst.
+    inversion IHrp1_1.
+    subst.
+    assumption.
+Qed.
+
+Definition runProgImpl {A B : Type} (def : A -> Partial (Prog A B)) (p : Prog A B) : Partial B.
+  refine (exist _ (fun b => runProgR def p (Preturn b)) _).
+  split.
+  - intros.
+    assert (eq := runProgFunction H H0).
+    apply PreturnInj.
+    assumption.
+  - intros none.
+    
+Defined.
+
+Definition runProg {A B : Type} (def : A -> Partial (Prog A B)) (a : A) : Partial B :=
+  Pbind (def a) (fun a' => 
+                   runProgImpl def a').
+
+Theorem runProgDefinitionRet {A B : Type} (def : A -> Partial (Prog A B)) (b : Partial B)
+  : runProgImpl def (Ret _ _ b) = b.
+Proof.
+  destruct b.
+  apply partialEq.
+  apply functional_extensionality.
+  intros b.
+  apply propositional_extensionality.
+  split.
+  - intros.
+    inversion H.
+    reflexivity.
+  - intros.
+    assert (exist _ x e = Preturn b). {
+      apply itIsReturn.
+      assumption.
+    }
+    rewrite H0.
+    apply retR.
+    (* TODO: would this proof be simpler with definition proof irrelevance? *)
+Qed.
+
+Theorem runProgDefinitionRec {A B : Type} {def : A -> Partial (Prog A B)} {a : A} {rest : B -> Prog A B}
+  : runProgImpl def (Rec _ _ a rest) =
+      Pbind (def a) (fun a' =>
+      Pbind (runProgImpl def a') (fun b =>
+          runProgImpl def (rest b))).
+Proof.
+  apply partialEq.
+  apply functional_extensionality.
+  intros b.
+  apply propositional_extensionality.
+  split.
+  - intros.
+    inversion H.
+    subst.
+    exists defa.
+    split.
+    rewrite H2.
+    reflexivity.
+    exists b0.
+    split.
+    apply H3.
+    apply H5.
+  - intros.
+    destruct H.
+    destruct H.
+    destruct H0.
+    destruct H0.
+
+    Check recR.
+    assert (def a = Preturn x). {
+      induction (def a).
+      apply itIsReturn.
+      simpl in H.
+      assumption.
+    }
+    eapply (@recR _ _ _ _ _ _ _ x H2).
+    simpl in H0, H1.
+    apply H0.
+    apply H1.
+Qed.
  
