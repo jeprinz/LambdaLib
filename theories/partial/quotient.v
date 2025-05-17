@@ -88,6 +88,15 @@ Module Quotient (EqRel : EqRel).
     apply H.
   Qed.
 
+  Theorem isMk : forall (x : t), exists a, x = mk a.
+  Proof.
+    intros.
+    Check (ind).
+    apply (ind (fun t => exists a, t = mk a)).
+    intros.
+    exists a.
+    auto.
+  Qed.
 
   Theorem sound : forall a b, R a b -> mk a = mk b.
   Proof.
@@ -150,4 +159,17 @@ Module Quotient (EqRel : EqRel).
       rewrite respects.
       assumption.
   Qed.
+
+  (* Just testing stuff here, this isn't going to work. *)
+  Definition lift2 {T : Type} (f : A -> T)
+             (respects : forall a b, R a b -> f a = f b)
+             (x : t) : exists t : T, exists a : A, x = mk a /\ f a = t.
+  Proof.
+    destruct (isMk x) as [a p].
+    subst.
+    exists (f a).
+    exists a.
+    auto.
+  Qed.
    
+End Quotient.

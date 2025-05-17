@@ -194,17 +194,16 @@ Inductive Prog (A B : Type) : Type :=
 | Rec : A -> (B -> Prog A B) -> Prog A B (* TODO: The input should be Partial A instead of just A *)
 .
 
-(* For now I'll keep it a little simpler and now have the def include a partial. *)
-Inductive runProgR {A B : Type} (def : A -> Partial (Prog A B)) : Prog A B -> Partial B -> Prop :=
-| retR : forall b, runProgR def (Ret _ _ b) b
-| recR : forall a b res rest defa,
-    def a = Preturn (Some defa)
-    -> runProgR def defa (Preturn (Some b))
+(* For now I'll keep it a little simpler and not have def output a partial. *)
+Inductive runProgR {A B : Type} (def : A -> Prog A B) : Prog A B -> B -> Prop :=
+| retR : forall b, runProgR def (Ret _ _ (Preturn (Some b))) b
+| recR : forall a b res rest,
+    runProgR def (def a) b
     -> runProgR def (rest b) res
     -> runProgR def (Rec _ _ a rest) res
 .
 
-Theorem runProgFunction {A B : Type} {def : A -> Partial (Prog A B)} {p : Prog A B} {b1 b2 : Partial B}
+Theorem runProgFunction {A B : Type} {def : A -> Prog A B} {p : Prog A B} {b1 b2 : B}
   (rp1 : runProgR def p b1) (rp2 : runProgR def p b2) : b1 = b2.
 Proof.
   intros.
@@ -216,28 +215,56 @@ Proof.
   - intros.
     inversion rp2.
     subst.
-    reflexivity.
+    apply (f_equal (fun f => f (Some b))) in H0.
+    assert (Some b = Some b2). {
+      rewrite H0.
+      reflexivity.
+    }
+    inversion H.
+    congruence.
   - intros.
     inversion rp2.
     subst.
     apply IHrp1_2.
-    rewrite H in H2.
-    apply PreturnInj in H2.
-    subst.
-    inversion H2.
-    subst.
-    specialize (IHrp1_1 _ H3).
-    apply PreturnInj in IHrp1_1.
-    subst.
-    inversion IHrp1_1.
+    specialize (IHrp1_1 _ H1).
     subst.
     assumption.
 Qed.
 
-Definition runProgImpl {A B : Type} (def : A -> Partial (Prog A B)) (p : Prog A B) : Partial B.
-  refine (exist _ (fun b => runProgR def p (Preturn b)) _).
+Require Import Classical.
+Check classic.
+
+Definition runProgImpl {A B : Type} (def : A -> Prog A B) (p : Prog A B) : Partial B.
+  refine (exist _ (fun b => match b with
+                            | Some b' => runProgR def p b'
+                            | None => ~ exists b', runProgR def p b'
+                            end) _).
   intros.
-  (* I don't think that this will be possible. *)
+  destruct (classic (exists b, runProgR def p b)).
+  - destruct H as [b rp].
+    exists (Some b).
+    split.
+    + apply rp.
+    + intros.
+      destruct x'.
+      * rewrite (runProgFunction rp H).
+        reflexivity.
+      * exfalso.
+        apply H.
+        exists b.
+        apply rp.
+  - exists None.
+    split.
+    + apply H.
+    + intros.
+      destruct x'.
+      * exfalso.
+        apply H.
+        exists b.
+        apply H0.
+      * reflexivity.
+Qed.
+  (* I don't think that this will be possible without excluded middle. *)
   assert (eq := runProgFunction H H0).
   apply PreturnInj.
   assumption.

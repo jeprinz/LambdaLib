@@ -44,6 +44,7 @@ Proof.
   assumption.
 Qed.
 
+(* TODO: make better names for all these*)
 Theorem itIsReturn :
   forall T (S : T -> Prop) (p : forall x y, S x -> S y -> x = y) (t : T),
     S t -> (exist _ S p) = Preturn t.
@@ -61,6 +62,18 @@ Proof.
   - intros.
     subst.
     assumption.
+Qed.
+
+Theorem returnIsIt :
+  forall T (S : T -> Prop) (p : forall x y, S x -> S y -> x = y) (t : T),
+    (exist _ S p) = Preturn t
+    -> S t.
+Proof.
+  intros.
+  apply (@f_equal (Partial T) (T -> Prop) (@proj1_sig _ _) _ _) in H.
+  simpl in H.
+  rewrite H.
+  reflexivity.
 Qed.
 
 Theorem PreturnInj : forall A (x y : A), Preturn x = Preturn y -> x = y.
@@ -656,5 +669,237 @@ Proof.
       subst.
       assumption.
 Qed.
-    
-    
+  
+(*
+I need a version of runProg which supports both the successive recursive calls from runProg1, and also the
+infinite number of recursive calls from runProg2.
+ *)
+
+
+
+Inductive Prog3 (A B : Type) : Type :=
+| Ret3 : Partial B -> Prog3 A B
+(*| Rec3 : forall (Index : Type), (Index -> A) -> ((Index -> B) -> Prog3 A B) -> Prog3 A B*)
+(* A couple of options. These are equivalent, but which is more convenient? *)
+| Rec3 : forall (P : A -> Prop), ((forall a, P a -> B) -> Prog3 A B) -> Prog3 A B
+(* Unfortunately, the following won't work. It is necessary to be able to know the set of elements of A
+on which recursive calls are made. *)
+(*| Rec3' : ((A -> B) -> Prog3 A B) -> Prog3 A B*)
+.
+
+
+
+Inductive runProg3R {A B : Type} (def : A -> Partial (Prog3 A B)) : Prog3 A B -> B -> Prop :=
+| retR3 : forall b, runProg3R def (Ret3 _ _ (Preturn b)) b
+| recR3 : forall P (recVals : forall a, P a -> B) (defa : forall a, P a -> Prog3 A B)
+                 (res : B) (rest : (forall a, P a -> B) -> Prog3 A B),
+    (forall a (pa : P a), def a = Preturn (defa a pa))
+    (* if for all inputs a satisfying P, recVals describes the recursive calls *)
+    -> (forall a (pa : P a), runProg3R def (defa a pa) (recVals a pa))
+    (* and given the results of those recursive calls, the program outputs res *)
+    -> runProg3R def (rest recVals) res
+    (* then overall res *)
+    -> runProg3R def (Rec3 _ _ P rest) res
+.
+
+Theorem runProgFunction3 {A B : Type} {def : A -> Partial (Prog3 A B)} {p : Prog3 A B} {b1 b2 : B}
+  (rp1 : runProg3R def p b1) (rp2 : runProg3R def p b2) : b1 = b2.
+Proof.
+  intros.
+  generalize rp2.
+  generalize b2.
+  clear rp2.
+  clear b2.
+  induction rp1.
+  - intros.
+    inversion rp2.
+    subst.
+    apply (f_equal (fun f => f b)) in H0.
+    rewrite H0.
+    reflexivity.
+  - intros.
+    inversion rp2.
+    subst.
+    apply IHrp1.
+    assert (rest1 = rest). {
+      apply exist_inj2_uip in H3.
+      assumption.
+    }
+    assert (defa = defa0). {
+      extensionality a.
+      extensionality pa.
+      specialize (H a pa).
+      specialize (H4 a pa).
+      rewrite H in H4.
+      apply PreturnInj in H4.
+      assumption.
+    }
+    subst.
+    assert (recVals = recVals0). {
+      extensionality a.
+      extensionality pa.
+      apply H1.
+      apply H5.
+    }
+    subst.
+    assumption.
+Qed.
+
+Definition runProgImpl3 {A B : Type} (def : A -> Partial (Prog3 A B)) (p : Prog3 A B) : Partial B.
+  refine (exist _ (fun b => runProg3R def p b) _).
+  intros.
+  assert (eq := runProgFunction3 H H0).
+  assumption.
+Defined.
+
+Definition runProg3 {A B : Type} (def : A -> Partial (Prog3 A B)) (a : A) : Partial B :=
+  Pbind (def a) (fun a' => 
+                   runProgImpl3 def a').
+
+Theorem runProgDefinitionRet3 {A B : Type} (def : A -> Partial (Prog3 A B)) (b : Partial B)
+  : runProgImpl3 def (Ret3 _ _ b) = b.
+Proof.
+  destruct b.
+  apply partialEq.
+  apply functional_extensionality.
+  intros b.
+  apply propositional_extensionality.
+  split.
+  - intros.
+    inversion H.
+    reflexivity.
+  - intros.
+    assert (exist _ x e = Preturn b). {
+      apply itIsReturn.
+      assumption.
+    }
+    rewrite H0.
+    apply retR3.
+    (* TODO: would this proof be simpler with definition proof irrelevance? *)
+Qed.
+Print Prog3.
+(*
+Theorem runProgDefinitionRec3 {A B : Type} {def : A -> Partial (Prog3 A B)}
+        {P : A -> Prop}
+        {rest : (forall a, P a -> B) -> Prog3 A B}
+  : runProgImpl3 def (Rec3 _ _ P rest) =
+      Pbind _ (fun recCalls =>
+ *)
+(* I need to test coq's inference. Will runProgDefinitionRec3 be able to infer recVals,
+given recValsCorrect? *)
+
+Theorem testInference
+        {f : nat -> nat}
+        (fact : forall n, S (f n) = 1)
+        : f 5 = 0.
+Proof.
+  intros.
+  assert (S (f 5) = 1).
+  apply fact.
+  apply eq_add_S.
+  assumption.
+Qed.
+
+Theorem testIt
+        {f : nat -> nat}
+        (fact : forall n, S (f n) = 1)
+  : f 5 = 0.
+Proof.
+  apply (testInference fact).
+Qed.
+(* So it appears that Coq's inference is good enough to find f, only given fact.
+That means that if I apply the below theorem, it will automatically find recVals
+given recValsCorrect*)
+
+Check runProg3.
+Theorem runProgDefinitionRec3 {A B : Type} {def : A -> Partial (Prog3 A B)}
+        {P : A -> Prop}
+        {rest : (forall a, P a -> B) -> Prog3 A B}
+        {recVals : forall a, P a -> B}
+        (recValsCorrect : forall a (pa : P a), runProg3 def a = Preturn (recVals a pa))
+  : runProgImpl3 def (Rec3 _ _ P rest) = runProgImpl3 def (rest recVals).
+Proof.
+  apply partialEq.
+  extensionality b.
+  apply propositional_extensionality.
+  split.
+  - intros.
+    inversion H.
+    subst.
+    apply exist_inj2_uip in H1.
+    subst.
+    assert (recVals = recVals0). {
+      extensionality a.
+      extensionality pa.
+      specialize (recValsCorrect a pa).
+      unfold runProg3 in recValsCorrect.
+      specialize (H2 a pa).
+      rewrite H2 in recValsCorrect.
+      rewrite bindDef2 in recValsCorrect.
+      apply returnIsIt in recValsCorrect.
+      specialize (H3 a pa).
+      assert (eq := runProgFunction3 recValsCorrect H3).
+      assumption.
+    }
+    subst.
+    assumption.
+  - intros.
+    Check @recR3.
+    Check (@recR3 _ _  def P recVals).
+    apply recR3 with (recVals = recVals, defa = def a).
+    Print runProg3R.
+      
+      
+
+        
+Theorem runProgDefinitionRec3 {A B : Type} {def : A -> Partial (Prog3 A B)}
+        {P : A -> Prop}
+        {rest : (forall a, P a -> B) -> Prog3 A B}
+  : runProgImpl3 def (Rec3 _ _ P rest) =
+      Pbind (def a) (fun a' =>
+      Pbind (runProgImpl3 def a') (fun b =>
+          runProgImpl3 def (rest b))).
+Proof.
+  apply partialEq.
+  apply functional_extensionality.
+  intros b.
+  apply propositional_extensionality.
+  split.
+  - intros.
+    inversion H.
+    subst.
+    exists defa.
+    split.
+    rewrite H2.
+    reflexivity.
+    exists b0.
+    split.
+    apply H3.
+    apply H5.
+  - intros.
+    destruct H.
+    destruct H.
+    destruct H0.
+    destruct H0.
+
+    Check recR.
+    assert (def a = Preturn x). {
+      induction (def a).
+      apply itIsReturn.
+      simpl in H.
+      assumption.
+    }
+    eapply (@recR _ _ _ _ _ _ _ x H2).
+    simpl in H0, H1.
+    apply H0.
+    apply H1.
+Qed.
+
+(*
+TODO
+1) should defa really be the way it is in recR3?
+2) Maybe actually runProg2 is already capable of doing all that runProg3 is supposed to be for?
+The problem that I thought existed with runProg2 is that you can't get the result of a recursive
+call, and then use that in deciding on which further recursive calls to make.
+Actually yes, this problem exists.
+*)
