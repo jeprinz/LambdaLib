@@ -186,6 +186,20 @@ Proof.
   simpl.
 Abort.
 
+Definition choice2 {A B : Type} (f : forall (a : A), exists (b : B), True)
+           (contractible : forall (b1 b2 : B), b1 = b2)
+  : A -> Classical B.
+  intros a.
+  refine (exist _ (fun b => True) _).
+  specialize (f a).
+  destruct f.
+  exists x.
+  split; auto.
+Qed.
+Search "hprop".
+(* This will be useful *)
+Check eq_sigT_hprop_iff.
+Search (forall (x y : _), x = y).
 (* We do need partiality for general recursion. Will this work? *)
 Definition Partial (T : Type) : Type := Classical (option T).
   
@@ -263,11 +277,6 @@ Definition runProgImpl {A B : Type} (def : A -> Prog A B) (p : Prog A B) : Parti
         exists b.
         apply H0.
       * reflexivity.
-Qed.
-  (* I don't think that this will be possible without excluded middle. *)
-  assert (eq := runProgFunction H H0).
-  apply PreturnInj.
-  assumption.
 Defined.
 
 Definition runProg {A B : Type} (def : A -> Partial (Prog A B)) (a : A) : Partial B :=
