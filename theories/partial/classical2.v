@@ -105,6 +105,16 @@ Proof.
     assumption.
 Qed.
 
+Definition Cmap {A B : Type} (f : A -> B) (c : Classical A) : Classical B
+  := Pbind c (fun a => Preturn (f a)).
+Theorem CmapDef : forall A B f a, @Cmap A B f (Preturn a) = Preturn (f a).
+Proof.
+  unfold Cmap.
+  intros.
+  rewrite bindDef.
+  reflexivity.
+Qed.
+
 Definition propBind {T : Type} (P : T -> Prop) (pa : Classical T) : Prop :=
   Preturn True = (Pbind pa (fun a => Preturn (P a))).
 
@@ -124,6 +134,7 @@ Proof.
     apply propositional_extensionality.
     split; auto.
 Qed.
+
 
 Theorem doesClassicalImplyNormal (P : Prop) : Classical P -> P.
 Proof.
@@ -176,6 +187,8 @@ Defined.
 Theorem ind {T : Type} : forall (P : Classical T -> Prop),
     (forall (a : T), P (Preturn a)) -> forall (q : Classical T), (P q).
 Proof.
+  intros.
+  destruct q.
 Abort.
 
 (*
@@ -230,6 +243,101 @@ Qed.
 *)
 (* We do need partiality for general recursion. Will this work? *)
 Definition Partial (T : Type) : Type := Classical (option T).
+
+(* better name? *)
+Definition seqOption (A B : Type) (f : A -> Partial B) : Partial (A -> Classical B).
+  refine (exist _ (fun g =>
+                     ((exists a, f a = Preturn None) /\ g = None)
+                     \/
+                       (exists g', g = Some g' /\ forall a, f a = Cmap Some (g' a))) _).
+  split.
+  - intros.
+    destruct H, H0.
+    + destruct H.
+      destruct H0.
+      subst.
+      reflexivity.
+    + exfalso.
+      destruct H0.
+      destruct H0.
+      destruct H.
+      destruct H.
+      specialize (H1 x1).
+      rewrite H in H1.
+      unfold Cmap in H1.
+      Check f_equal.
+      apply (@f_equal _ _ (@proj1_sig _ _) _ _) in H1.
+      simpl in H1.
+      apply (f_equal (fun f => f None)) in H1.
+      assert (@None B = None) by auto.
+      rewrite H1 in H3.
+      destruct H3.
+      destruct H3.
+      inversion H4.
+    + exfalso.
+      destruct H0.
+      destruct H0.
+      destruct H.
+      destruct H.
+      specialize (H2 x0).
+      subst.
+      rewrite H0 in H2.
+      unfold Cmap in H2.
+      Check f_equal.
+      apply (@f_equal _ _ (@proj1_sig _ _) _ _) in H2.
+      simpl in H2.
+      apply (f_equal (fun f => f None)) in H2.
+      assert (@None B = None) by auto.
+      rewrite H2 in H.
+      destruct H.
+      destruct H.
+      inversion H1.
+    + destruct H.
+      destruct H.
+      destruct H0.
+      destruct H0.
+      subst.
+      assert (x0 = x1). {
+        extensionality a.
+        specialize (H1 a).
+        specialize (H2 a).
+        rewrite H1 in H2.
+        clear H1.
+        apply classicalEq2.
+        extensionality b.
+        apply (@f_equal _ _ (@proj1_sig _ _) _ _) in H2.
+        simpl in H2.
+        apply (@f_equal _ _ (fun f => f (Some b)) _ _) in H2.
+        simpl in H2.
+        apply (@f_equal _ _ (@ex_proj2 _ _ _) _ _) in H2.
+        
+      
+  (*
+  refine (exist _ (fun g =>
+                     (not (forall a, exists b, f a = Preturn (Some b)) /\ g = None)
+                     \/
+                     (exists g', g = Some g' /\ forall a, f a = Cmap Some (g' a))) _).
+  split.
+  - intros.
+    destruct H, H0.
+    + destruct H.
+      destruct H0.
+      subst.
+      reflexivity.
+    + exfalso.
+      apply H.
+      destruct H0.
+      destruct H0.
+      subst.
+      intros.
+      specialize (H1 a).
+      rewrite H1.
+      rewrite CmapDef.
+   *)
+
+Abort.
+(*Maybe a better design would be to put a double negation all the way around the outside of the prop part
+of classical? *)
   
 Inductive Prog (A B : Type) : Type :=
 | Ret : Partial B -> Prog A B
@@ -277,15 +385,41 @@ Proof.
 Qed.
 
 Definition runProgImpl {A B : Type} (def : A -> Partial (Prog A B)) (p : Prog A B) : Partial B.
-  refine (exist _ (fun b => runProgR def p (Preturn b)) _).
+  unfold Partial.
+  refine (exist _ (fun b => match b with
+                            | Some b' => runProgR def p (Preturn b)
+                            | None => not (exists b', runProgR def p (Preturn (Some b')))
+                            end) _).
   split.
   - intros.
-    assert (eq := runProgFunction H H0).
-    apply PreturnInj.
-    assumption.
-  - intros none.
-    
+    destruct x, y.
+    + apply PreturnInj.
+      apply (runProgFunction H H0).
+    + exfalso.
+      apply H0.
+      exists b.
+      assumption.
+    + exfalso.
+      apply H.
+      exists b.
+      assumption.
+    + reflexivity.
+  - intros fact.
+    apply (thing (exists b, runProgR def p (Preturn (Some b)))).
+    intros or.
+    destruct or.
+    + destruct H.
+      specialize (fact (Some x)).
+      apply fact.
+      assumption.
+    + specialize (fact None).
+      apply fact.
+      intros [b r].
+      apply H.
+      exists b.
+      assumption.
 Defined.
+
 
 Definition runProg {A B : Type} (def : A -> Partial (Prog A B)) (a : A) : Partial B :=
   Pbind (def a) (fun a' => 

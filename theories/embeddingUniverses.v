@@ -142,7 +142,6 @@ Proof.
   - intros env inctx.
     specialize (IHTyped1 env inctx) as [SU [InU piAB_in_SU]].
     inversion InU; clear InU; solve_all.
-    (*inversion InU; clear InU; subst; [inversion H1|]; solve_all.*)
     subst.
     destruct piAB_in_SU as [SPiAB In'PiAB].
     inversion In'PiAB; clear In'PiAB; solve_all.

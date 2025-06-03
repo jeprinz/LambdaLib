@@ -15,11 +15,11 @@ except during intermediate states.
 
 (* We need to hide Mark in a module so that it is not definitionally equal to its definition *)
 Module Type HowToHideMark.
-  Parameter Mark : forall {X : Type}, X -> X. (* He hides in here where no one can see him *)
+  Parameter Mark : forall {X : Type}, X -> X.
   Parameter MarkIsJustId : forall {X : Type} {x : X}, Mark x = x.
 End HowToHideMark.
 Module HiddenMark : HowToHideMark.
-  Definition Mark {X : Type} (x : X) := x.
+  Definition Mark {X : Type} (x : X) := x. (* He hides in here where no one can see him *)
   Theorem MarkIsJustId {X : Type} {x : X} : Mark x = x.
   Proof.
     intros.
@@ -151,26 +151,6 @@ Ltac lambda_solve_step :=
       | H : @eq string ?s ?s |- _ => clear H
       | H : @eq string ?s1 ?s2 |- _ => inversion H
       | H : @eq QTerm (pair ?t1 ?t2) (pair ?t1' ?t2') |- _ => apply pairInj in H; destruct H
-      (*
-      (* Beta reduction cases *)
-      | H : app (lam ?s ?t1) ?t2 = ?t3 |- _ => rewrite beta in H; compute_subst_in H
-      | H : ?t1 = app (lam ?s ?t2) ?t3 |- _ => rewrite beta in H; compute_subst_in H
-      | |- app (lam ?s ?t1) ?t2 = ?t3 => rewrite beta; compute_subst
-      | |- ?t1 = app (lam ?s ?t2) ?t3 => rewrite beta; compute_subst
-      (* pi-beta reduction cases *)
-      | H : pi1 (pair ?t1 ?t2) = ?t3 |- _ => rewrite betapi1 in H
-      | H : ?t1 = pi1 (pair ?t2 ?t3) |- _ => rewrite betapi1 in H
-      | |- pi1 (pair ?t1 ?t2) = ?t3 => rewrite betapi1
-      | |- ?t1 = pi1 (pair ?t2 ?t3) => rewrite betapi1
-      | H : pi2 (pair ?t1 ?t2) = ?t3 |- _ => rewrite betapi2 in H
-      | H : ?t1 = pi2 (pair ?t2 ?t3) |- _ => rewrite betapi2 in H
-      | |- pi2 (pair ?t1 ?t2) = ?t3 => rewrite betapi2
-      | |- ?t1 = pi2 (pair ?t2 ?t3) => rewrite betapi2
-       *)
-      (* x = t2, should subst x. TODO: need case for t1 = x *)
-      (* Ideally we would only do beta when the top level is a beta redex,
-         but its much easier to just default to
-         rewriting betas if nothing else works. *)
       | H : @eq QTerm ?t1 ?t2 |- _ => first [
                                          rewrite beta in H ; compute_subst_in H
                                        | rewrite betapi1 in H

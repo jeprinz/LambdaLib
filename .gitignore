@@ -47,6 +47,7 @@ time-of-build-pretty.log
 # generated coq files
 
 # emacs temporary files
+*\#*\#
 *~
 
 *.aux
