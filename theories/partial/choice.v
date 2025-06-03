@@ -1,5 +1,6 @@
 Require Import Classical.
 Require Import FunctionalExtensionality.
+Require Import Coq.Logic.PropExtensionality.
 
 Section existT_inj2_uip.
   Variables (A : Type) (P : A -> Type).
@@ -168,6 +169,30 @@ Definition collectOption {A B : Type} (f : A -> option B) : option (A -> B) :=
 Definition collectOption2 {A : Type} {B : A -> Type} {C : Type}
            (f : forall (a : A), B a -> option C) : option (forall a, B a -> C) :=
   chooseOption (forall a, B a -> C) (fun f' => forall a b, Some (f' a b) = f a b).
+
+Theorem collectOption2Def {A : Type} {B : A -> Type} {C : Type}
+        (f : forall (a : A), B a -> C) :
+  collectOption2 (fun a b => Some (f a b)) = Some f.
+Proof.
+  unfold collectOption2, chooseOption.
+  apply choiceInd.
+  intros.
+  destruct t.
+  - assert (c = f). {
+      extensionality a.
+      extensionality b.
+      specialize (H a b).
+      inversion H.
+      reflexivity.
+    }
+    subst.
+    reflexivity.
+  - exfalso.
+    apply H.
+    exists f.
+    intros.
+    reflexivity.
+Qed.
 
 (* Is this really not in the standard library? *)
 Definition bind {A B : Type} (a : option A) (f : A -> option B) : option B :=
@@ -413,3 +438,66 @@ Proof.
            apply H3.
     + reflexivity.
 Qed.    
+
+
+
+
+(*
+As an example to test recursion with infinite recursive calls per call,
+take the function
+f : nat * nat -> Prop
+f (0, _) = True
+f (S n, _) = not (forall m, f (n, m))
+
+The goal is to see if I can automate the running of this function.
+The output should not just be True or False, but should be a proposition expression built out
+of the recurrence.
+ *)
+
+Definition fImpl : nat * nat -> Prog (nat * nat) Prop :=
+  fun nm => match nm with
+            | (O, _) => Ret _ _ (Some True)
+            | (S n, m) => Rec _ _
+                                         (fun nm => fst nm = n)
+                                         (fun rec => Ret _ _ (Some
+                                 (not (forall m, rec (n, m) eq_refl))))
+            end.
+
+Definition exampleInfFun : nat * nat -> option Prop.
+  refine (runProg fImpl).
+Defined.
+
+(* Now to try to run the function: *)
+Theorem runExampleFun : exampleInfFun (1, 5) = Some False.
+  unfold exampleInfFun, runProg.
+  simpl.
+  rewrite runProgDefinitionRec.
+
+  assert ((fun (a : nat * nat) (_ : fst a = 0) => runProg fImpl a) = fun _ _ => Some True). {
+    extensionality nm.
+    extensionality p.
+    destruct nm as [n m].
+    simpl in p.
+    subst.
+    unfold runProg.
+    simpl.
+    rewrite runProgDefinitionRet.
+    reflexivity.
+  }
+  rewrite H.
+  rewrite collectOption2Def.
+  simpl.
+  rewrite runProgDefinitionRet.
+  assert ((~ (nat -> True)) = False). {
+    apply propositional_extensionality.
+    split.
+    - intros.
+      apply H0.
+      auto.
+    - intros.
+      exfalso.
+      assumption.
+  }
+  rewrite H0.
+  reflexivity.
+Qed.
