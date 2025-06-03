@@ -27,22 +27,32 @@ Section existT_inj2_uip.
 End existT_inj2_uip.
 
 (* These are how it works in the lean4 standard library *)
-Axiom choose : forall (T : Type) (P : T -> Prop), (exists t, P t) -> T.
-Axiom chooseSpec : forall T P x, P (choose T P x).
+Axiom choose : forall (T : Type) (P : T -> Prop) {_ : exists t, P t}, T.
+Axiom chooseSpec : forall T P x, P (@choose T P x).
 (* Apparently by Diaconescu's theorem you can derive LEM from this (see lean stdlib) *)
 
 Theorem choiceInd : forall (T : Type) (P Q : T -> Prop) x,
-    (forall t, P t -> Q t) -> Q (choose T P x).
+    (forall t, P t -> Q t) -> Q (@choose T P x).
 Proof.
   intros.
   apply H.
   apply chooseSpec.
 Qed.
 
+Theorem choiceIndHyp : forall T P t p, t = @choose T P p -> P t.
+Proof.
+  intros.
+  generalize dependent H.
+  apply choiceInd.
+  intros.
+  subst.
+  assumption.
+Qed.
+
 Definition Pif {A : Type} (P : Prop) (a1 a2 : A) : A.
   Search (Prop -> Type).
   Check (sum {a : A | P} {a : A | ~ P}).
-  refine (choose A (fun a => P /\ a = a1 \/ ~P /\ a = a2) _).
+  refine (choose A (fun a => P /\ a = a1 \/ ~P /\ a = a2)).
   destruct (classic P).
   - exists a1.
     auto.
@@ -81,7 +91,19 @@ Check choose.
 (* Using choice, returns the element of T satisfying P if it exists, otherwise None *)
 Definition chooseOption (T : Type) (P : T -> Prop) : option T.
   refine (choose (option T)
-                 (fun ot => ((~exists t, P t) /\ ot = None) \/ (exists t, P t /\ ot = Some t)) _).
+                 (fun ot => match ot with
+                            | Some t => P t
+                            | None => ~exists t, P t
+                            end)).
+  destruct (classic (exists t, P t)).
+  - destruct H.
+    exists (Some x).
+    assumption.
+  -  exists None.
+     assumption.
+  (*
+  refine (choose (option T)
+                 (fun ot => ((~exists t, P t) /\ ot = None) \/ (exists t, P t /\ ot = Some t))).
   destruct (classic (exists t, P t)).
   - destruct H.
     exists (Some x).
@@ -90,6 +112,7 @@ Definition chooseOption (T : Type) (P : T -> Prop) : option T.
   - exists None.
     apply or_introl.
     eauto.
+   *)
 Defined.
 
 Theorem chooseOptionSpec1 : forall T P t,
@@ -99,6 +122,12 @@ Proof.
   unfold chooseOption.
   apply choiceInd.
   intros.
+  destruct t0.
+  - inversion H0.
+    subst.
+    assumption.
+  - inversion H0.
+  (*
   destruct H.
   - destruct H.
     subst.
@@ -109,6 +138,7 @@ Proof.
     inversion H0.
     subst.
     assumption.
+   *)
 Qed.  
 
 Theorem chooseOptionSpec2 : forall T P,
@@ -118,6 +148,10 @@ Proof.
   unfold chooseOption.
   apply choiceInd.
   intros.
+  destruct t.
+  - inversion H0.
+  - assumption.
+  (*
   destruct H.
   - destruct H.
     assumption.
@@ -125,6 +159,7 @@ Proof.
     destruct H.
     subst.
     inversion H0.
+   *)
 Qed.
     
 Definition collectOption {A B : Type} (f : A -> option B) : option (A -> B) :=
@@ -192,12 +227,12 @@ Proof.
 Qed.
 
 Definition runProgImpl {A B : Type} (def : A -> Prog A B) (p : Prog A B) : option B.
-  Check Pif.
-  Check choose.
+  refine (chooseOption B (fun b => runProgR def p b)).
+  (*
   refine (choose (option B) (fun ob =>
                                (exists b, runProgR def p b /\ ob = Some b)
                                \/
-                                 (ob = None /\ ~exists b, runProgR def p b)) _).
+                                 (ob = None /\ ~exists b, runProgR def p b))).
   destruct (classic (exists b, runProgR def p b)).
   - destruct H.
     exists (Some x).
@@ -206,6 +241,7 @@ Definition runProgImpl {A B : Type} (def : A -> Prog A B) (p : Prog A B) : optio
   - exists None.
     apply or_intror.
     eauto.
+   *)
 Defined.
 
 Definition runProg {A B : Type} (def : A -> Prog A B) (a : A) : option B :=
@@ -213,6 +249,18 @@ Definition runProg {A B : Type} (def : A -> Prog A B) (a : A) : option B :=
 
 Theorem runProgDefinitionRet {A B : Type} (def : A -> Prog A B) (b : B)
   : runProgImpl def (Ret _ _ (Some b)) = Some b.
+  unfold runProgImpl, chooseOption.
+  apply choiceInd.
+  intros.
+  destruct t.
+  - inversion H.
+    subst.
+    reflexivity.
+  - exfalso.
+    apply H.
+    exists b.
+    constructor.
+  (*
   intros.
   unfold runProgImpl.
   apply choiceInd.
@@ -227,9 +275,67 @@ Theorem runProgDefinitionRet {A B : Type} (def : A -> Prog A B) (b : B)
     apply H0.
     exists b.
     constructor.
+   *)
 Qed.
 Check collectOption.
 
+
+
+
+(* lemma:
+x = choose P -> P x
+*)
+
+
+
+     
+ Theorem runProgDefinitionRec2 {A B : Type} {def : A -> Prog A B}
+        {P : A -> Prop}
+        {rest : (forall a, P a -> B) -> Prog A B}
+        {recVals : forall a, P a -> B}
+        (recValsCorrect : forall a (pa : P a), runProg def a = Some (recVals a pa))
+  : runProgImpl def (Rec _ _ P rest) = runProgImpl def (rest recVals).
+ Proof.
+   unfold runProg, runProgImpl, chooseOption in *.
+   repeat apply choiceInd.
+   intros.
+   assert (forall a (pa : P a), runProgR def (def a) (recVals a pa)). {
+     intros.
+     specialize (recValsCorrect a pa).
+     symmetry in recValsCorrect.
+     Check choiceIndHyp.
+     apply choiceIndHyp in recValsCorrect.
+     assumption.
+   }
+   clear recValsCorrect.
+   (*H1 could have just been the input to runProgDefinitionRec2*)
+   destruct t0.
+   - inversion H0; clear H0.
+     apply exist_inj2_uip in H3.
+     subst.
+     assert (recVals = recVals0). {
+       extensionality a.
+       extensionality pa.
+       exact (runProgFunction (H1 a pa) (H4 a pa)).
+     }
+     subst.
+     destruct t.
+     + rewrite (runProgFunction H6 H).
+       reflexivity.
+     + exfalso.
+       apply H.
+       exists b.
+       apply H6.
+   - destruct t.
+     + exfalso.
+       apply H0.
+       exists b.
+       econstructor.
+       * apply H1.
+       * assumption.
+     + reflexivity.
+ Qed.
+ 
 Theorem runProgDefinitionRec {A B : Type} {def : A -> Prog A B}
         {P : A -> Prop}
         {rest : (forall a, P a -> B) -> Prog A B}
@@ -240,22 +346,70 @@ Proof.
   repeat unfold runProgImpl, runProg, collectOption2, chooseOption.
   repeat apply choiceInd.
   intros.
-
-(*
-Theorem runProgDefinitionRec2 {A B : Type} {def : A -> Prog A B}
-        {P : A -> Prop}
-        {rest : (forall a, P a -> B) -> Prog A B}
-        {recVals : forall a, P a -> B}
-        (recValsCorrect : forall a (pa : P a), runProg3 def a = Some (recVals a pa))
-  : runProgImpl def (Rec3 _ _ P rest) = runProgImpl def (rest recVals).
-Proof.
-  unfold runProgImpl at 1.
-  apply choiceInd.
-  intros.
-  destruct H.
-  - destruct H.
-    destruct H.
-    subst.
-    unfold runProg3 in recValsCorrect.
-    rewrite
-*)
+  destruct t.
+  - 
+    assert (forall a (pa : P a), runProgR def (def a) (b a pa)). {
+      intros.
+      specialize (H a pa).
+      apply choiceIndHyp in H.
+      assumption.
+    }
+    clear H.
+    simpl.
+    apply choiceInd.
+    intros.
+    destruct t0.
+    inversion H0; clear H0; subst.
+    + apply exist_inj2_uip in H3.
+      subst.
+      assert (b = recVals). {
+        extensionality a.
+        extensionality pa.
+        exact (runProgFunction (H1 a pa) (H4 a pa)).
+      }
+      subst.
+      destruct t.
+      * rewrite (runProgFunction H H6).
+        reflexivity.
+      * exfalso.
+        apply H.
+        exists b0.
+        assumption.
+    + destruct t.
+      * exfalso.
+        apply H0.
+        exists b0.
+        econstructor.
+        apply H1.
+        apply H.
+      * reflexivity.
+  - simpl.
+    destruct t0.
+    + exfalso.
+      inversion H0.
+      apply H.
+      apply exist_inj2_uip in H2.
+      subst.
+      exists recVals.
+      intros.
+      apply choiceInd.
+      intros.
+      destruct t.
+      * specialize (H3 a b0).
+        rewrite (runProgFunction H3 H1).
+        reflexivity.
+      * exfalso.
+        apply H.
+        exists recVals.
+        intros.
+        apply choiceInd.
+        intros.
+        destruct t.
+        -- rewrite (runProgFunction (H3 a0 b1) H2).
+           reflexivity.
+        -- exfalso.
+           apply H1.
+           exists (recVals a b0).
+           apply H3.
+    + reflexivity.
+Qed.    
