@@ -48,6 +48,7 @@ time-of-build-pretty.log
 
 # emacs temporary files
 *\#*\#
+*\.#*\#
 *~
 
 *.aux
