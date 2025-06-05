@@ -353,7 +353,7 @@ Inductive IncompatiblePseudoNeutral : QTerm -> QTerm -> Prop :=
 .
 
 Axiom neutralInj : forall a b c d,
-    PseudoNeutral a -> PseudoNeutral c -> app a b = app c d -> a = c /\ b = d.
+    PseudoNeutral a -> PseudoNeutral c -> app a b = app c d <-> a = c /\ b = d.
 
 Axiom neutralContradiction : forall t1 t2,
     PseudoNeutral t1 -> PseudoNeutral t2 -> IncompatiblePseudoNeutral t1 t2
@@ -365,6 +365,8 @@ Ltac neutral_inj_case :=
       apply neutralInj in H;
       repeat constructor;
       destruct H
+  | |- app ?a ?b = app ?c ?d =>
+      apply neutralInj; [solve [repeat constructor] | solve [repeat constructor] | ] ; split
   end.
 
 Theorem application_injective_test
@@ -375,6 +377,14 @@ Proof.
   repeat neutral_inj_case.
   assumption.
 Qed.
+
+Theorem application_injective_goal_test
+        (a b c d : QTerm)
+  : <CONST `a `b> = <CONST `c `d>.
+Proof.
+  repeat neutral_inj_case.
+  reflexivity.
+Abort.
 
 Ltac fast_neutral_unequal_case :=
   match goal with

@@ -68,8 +68,8 @@ Defined.
 Definition runProg {A B : Type} (def : A -> Prog A B) (a : A) : option B :=
   (runProgImpl def (def a)).
 
-Theorem runProgDefinitionRet {A B : Type} (def : A -> Prog A B) (b : B)
-  : runProgImpl def (Ret _ _ (Some b)) = Some b.
+Theorem runProgDefinitionRet {A B : Type} (def : A -> Prog A B) (b : option B)
+  : runProgImpl def (Ret _ _ b) = b.
   unfold runProgImpl, chooseOption.
   apply choiceInd.
   intros.
@@ -77,10 +77,12 @@ Theorem runProgDefinitionRet {A B : Type} (def : A -> Prog A B) (b : B)
   - inversion H.
     subst.
     reflexivity.
-  - exfalso.
-    apply H.
-    exists b.
-    constructor.
+  - destruct b.
+    + exfalso.
+      apply H.
+      exists b.
+      constructor.
+    + reflexivity.
 Qed.
      
 Theorem runProgDefinitionRec2 {A B : Type} {def : A -> Prog A B}

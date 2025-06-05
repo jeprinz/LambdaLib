@@ -75,7 +75,7 @@ Proof.
     contradiction.
 Qed.
 
-Theorem PifDef2 : forall (A : Type) P (a1 a2 : A), ~P -> Pif P a1 a2 = a2.
+Theorem PifDef2 : forall (A : Type) P (a1 a2 : A), (P -> False) -> Pif P a1 a2 = a2.
 Proof.
   intros.
   unfold Pif.
