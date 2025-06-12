@@ -79,9 +79,9 @@ Ltac solve_all := repeat (unfold_all ; lambda_solve ; repeat neutral_inj_case ;l
 Fixpoint In (level : nat) : QTerm -> option (QTerm -> Prop).
   refine (runProg (fun T =>
                      (* Pi A B *)
-                     Pmatch (fun AB => T = <Pi {fst AB} {snd AB}>)
-                            (fun AB => Rec _ _ unit (fun _ => fst AB)
-                                       (fun InA => Rec _ _ {a | InA tt a} (fun a => <B {proj1_sig a}>)
+                     Pmatch2 (fun A B => T = <Pi `A `B>)
+                            (fun A B => Rec _ _ unit (fun _ => A)
+                                       (fun InA => Rec _ _ {a | InA tt a} (fun a => <`B {proj1_sig a}>)
                                        (fun InB => Ret _ _ (Some
                                        (fun f => forall a (ina : InA tt a), InB (exist _ a ina) <`f `a>)))))
                      (* Bool *)
@@ -117,8 +117,52 @@ Proof.
   - intros env inctx.
     specialize (IHTyped1 env inctx) as [SPIAB [inPiAB s1Elem]].
     specialize (IHTyped2 env inctx) as [SA [inA s2Elem]].
+    (* this is how fold works: *)
+    unfold In in inPiAB.
+    progress fold (In (S lvl) <`pi `A `B `env>) in inPiAB.
+    (**)
+    assert (In (S lvl) <`pi `A `B `env> =
+              bind (In (S lvl) <`A `env>) (fun InA =>
+              bind (collectOption (fun a => In (S lvl) <`B {proj1_sig a}>)) (fun InB =>
+              (Some (fun f => forall a (ina : InA a), InB (exist _ a ina) <`f `a>))))). {
+      unfold pi.
+      evaluate_function solve_all.
+      reflexivity.
+      
     unfold pi in inPiAB.
     evaluate_function_in solve_all inPiAB.
+    (* I want to be able to do (fold (In (S lvl) A)) for example here.*)
+    Print runProgImpl.
+    Print chooseOption.
+    evaluate_function_in solve_all inA.
+    rewrite inA in inPiAB.
+    rewrite inPiAB in s1Elem.
+    clear inPiAB inA
+    eexists.
+    evaluate_function solve_all.
+    progress fold (In (S lvl) <`A `env>) in H1.
+    (*
+    (erewrite Pmatch2Def1 in inPiAB ; [| solve [solve_all]
+                                 | solve [intros; solve_all] | solve [intros; solve_all]]).
+     *)
+    Check @runProg.
+    progress fold (@runProg QTerm (QTerm -> Prop)) in inPiAB.
+    progress fold In in inPiAB.
+    erewrite Pmatch2Def1 in inPiAB.
+    2: {
+      solve_all.
+    }
+    2: {
+      intros.
+      solve_all.
+    }
+    2: {
+      intros.
+      solve_all.
+    }
+    (* Where I left off: I added Pmatch2 because using a product was messing up the automation.
+     I haven't gotten the rewrites for Pmatch2 in the tactic correct yet. *)
+    erewrite Pmatch2Def1 in inPiAB.
     Check @PmatchDef1.
     erewrite (@PmatchDef1 _ _ _ ?[t]) in inPiAB.
     3: {

@@ -362,8 +362,7 @@ Axiom neutralContradiction : forall t1 t2,
 Ltac neutral_inj_case :=
   match goal with
   | H : app ?a ?b = app ?c ?d |- _ =>
-      apply neutralInj in H;
-      repeat constructor;
+      apply neutralInj in H; [ | solve [repeat constructor] | solve [repeat constructor]];
       destruct H
   | |- app ?a ?b = app ?c ?d =>
       apply neutralInj; [solve [repeat constructor] | solve [repeat constructor] | ] ; split
