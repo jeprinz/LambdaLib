@@ -60,10 +60,13 @@ Module Type LambdaSpec.
   Parameter betapi1 : forall t1 t2, pi1 (pair t1 t2) = t1.
   Parameter betapi2 : forall t1 t2, pi2 (pair t1 t2) = t2.
   Parameter eta : forall (s : string) (t : QTerm), t = lam s (app (lift s 0 t) (var s 0)).
+  Parameter SP : forall {t}, t = (pair (pi1 t) (pi2 t)).
   Parameter alpha : forall (s1 s2 : string) (t : QTerm),
       lam s1 t = lam s2 (subst s1 0 (var s2 0) (lift s2 0 t)).
 
-  Parameter subst_id : forall s i t, subst s i (var s i) t = t.
+  (* PROBLEM: This is wrong. Consider for example
+   x1 [x0 / x0] = x0. *)
+(*  Parameter subst_id : forall s i t, subst s i (var s i) t = t.*)
   Parameter subst_lift : forall s i t1 t2, subst s i t1 (lift s i t2) = t2.
   Parameter lift_lift : forall s1 s2 i1 i2 t,
       lift s1 i1 (lift s2 i2 t) =
@@ -243,6 +246,14 @@ Proof.
   apply eta.
 Qed.
 
+Theorem SP : forall {t}, t = (pair (pi1 t) (pi2 t)).
+Proof.
+  intros.
+  unfold pair, pi1, pi2.
+  quotient_map_eq_simpl.
+  apply SP.
+Qed.
+
 Theorem lift_internal_const : forall s i c, lift s i (QTerm.mk (term.const c)) = QTerm.mk (term.const c).
 Proof.
   intros.
@@ -356,7 +367,8 @@ Proof.
   rewrite lift_internal_const.
   reflexivity.
 Qed.
-  
+
+(*
 Theorem subst_id : forall s i t, subst s i (var s i) t = t.
 Proof.
   intros.
@@ -364,6 +376,7 @@ Proof.
   quotient_map_eq_simpl.
   apply subst_id.
 Qed.
+*)
 
 Theorem subst_lift : forall s i t1 t2, subst s i t1 (lift s i t2) = t2.
 Proof.

@@ -77,7 +77,7 @@ lift TAKE an index? Check Nipkow paper. *)
         else var s2 i else var s2 i)
 | subst_const : forall s1 s2 i t, convertible (subst s1 i t (const s2)) (const s2)
 (* extra facts *)
-| subst_id : forall s i t, convertible (subst s i (var s i) t) t
+(*| subst_id : forall s i t, convertible (subst s i (var s i) t) t*) (* This is incorrect *)
 | subst_lift : forall s i t1 t2, convertible (subst s i t1 (lift s i t2)) t2
 (* Hopefully this is right now *)
 | lift_lift : forall s1 s2 i1 i2 t,

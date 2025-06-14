@@ -32,9 +32,8 @@ Proof.
   reflexivity.
   unfold x in H0.
   repeat rewrite beta in H0.
-  repeat rewrite subst_id in H0.
-  assumption.
-Qed.
+  (* I don't think that this can be proven in this way. *)
+Admitted.
 
 (* TODO: For now, this will be an axiom. Later I will prove from confluence hopefully *)
 Axiom constInj : forall {T : Type} (t1 t2 : T), const t1 = const t2 -> t1 = t2.
@@ -142,5 +141,27 @@ Proof.
   unfold l, r in H0.
   normalize H0.
   repeat rewrite subst_lift in H0.
+  assumption.
+Qed.
+
+(*
+These are for the "pattern subset" case.
+ *)
+
+Theorem pattern_direction1 : forall (t1 t2 : QTerm) s, <`t1 [`s] {var s 0}> = t2 -> t1 = <fun `s => `t2>.
+Proof.
+  intros.
+  apply (f_equal (fun t => <fun `s => `t>)) in H.
+  rewrite <- eta in H.
+  assumption.
+Qed.
+Print eta.
+
+Theorem pattern_direction2 : forall (t1 t2 : QTerm) s, t1 = <fun `s => `t2> -> <`t1 [`s] {var s 0}> = t2.
+Proof.
+  intros.
+  Check eta.
+  rewrite (eta s t1) in H.
+  apply lamInj in H.
   assumption.
 Qed.

@@ -125,6 +125,35 @@ Definition match_on_id' {t : QTerm} (prog : Typed nil 2 <`pi `U `U> t) : {t' & T
     ).
 Abort.
 Check lift.
+Theorem testOneDirectionAtLeast
+        (t1 t2 : QTerm) (s : string)
+        : t1 = <fun `s => `t2>
+                          -> <`t1 [`s] {var s 0}> = t2.
+Proof.
+  intros.
+  subst.
+  normalize.
+Abort.
+
+Theorem direction1 : forall (t1 t2 : QTerm) s, <`t1 [`s] {var s 0}> = t2 -> t1 = <fun `s => `t2>.
+Proof.
+  intros.
+  apply (f_equal (fun t => <fun `s => `t>)) in H.
+  rewrite <- eta in H.
+  assumption.
+Qed.
+Print eta.
+
+Theorem direction2 : forall (t1 t2 : QTerm) s, t1 = <fun `s => `t2> -> <`t1 [`s] {var s 0}> = t2.
+Proof.
+  intros.
+  Check eta.
+  rewrite (eta s t1) in H.
+  apply lamInj in H.
+  assumption.
+Qed.
+
+(* THIS IS WRONG, there shouldn't be a weakening I think? *)
 Axiom fact1 : forall (t1 t2 : QTerm) s, <`t1 [`s] {var s 0}> = t2 -> t1 = <fun `s => `t2>.
 Locate "[".
 Axiom fact2 : forall (t1 t2 : QTerm) s1 s2, <`t1 [`s1] [`s2] ({var s1 0}, {var s2 0})> = t2
@@ -154,7 +183,23 @@ Definition match_on_id' {ctx T t: QTerm} {lvl} (prog : Typed ctx lvl T t)
       | ty_false => _
       | ty_lambda t' => fun _ _ _ => (existT _ _ (defer_cast t'))
       end
-    ); try solve[intros; solve_all_2].
+    );try solve[intros; solve_all_2].
+  
+
+  (*
+    t1 x = t2
+    <->
+    t1 = \x.t2
+    (if x not in t1)
+    
+    t1 (x, y) = t2
+    <->
+    t1 = \p. t2 [x/fst p] [y/snd p]
+    
+    
+    t1 (x, (y, z)) = t2
+    t1 (fst x) = t2
+*)
 Defined.
 
 Theorem match_on_id_works : match_on_id' (ty_lambda ty_true) eq_refl eq_refl eq_refl

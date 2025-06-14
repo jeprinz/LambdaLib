@@ -465,4 +465,69 @@ Proof.
   apply_cast x.
   lambda_solve.
 Qed.
- 
+
+Theorem pattern_case
+        (t1 t2 : QTerm)
+        (H : <`t1 [x] x> = t2)
+  : t1 = <fun x => `t2>.
+Proof.
+  apply pattern_direction1 in H.
+  assumption.
+  (*TODO: put into automation*)
+Abort.
+
+Theorem pattern_case_2
+        (t1 t2 : QTerm)
+        (H : <`t1 [x] [y] x> = t2)
+  : <`t1 [y]> = <fun x => `t2>.
+Proof.
+  
+Abort.
+
+(* Pi injectivity should work, but I think it requires the special cases *)
+Theorem pi_injectivity
+        (A B A' B': QTerm)
+        (H : <fun env => Pi (`A [env] env) (fun a => `B [env] [a] (env, a))>
+           = <fun env => Pi (`A' [env] env) (fun a => `B' [env] [a] (env, a))>)
+  : A = A' /\ B = B'.
+  lambda_solve.
+  repeat neutral_inj_case.
+  lambda_solve.
+  apply pattern_direction1 in H1.
+  lambda_solve.
+  remember <fun x => fun y => `B [x] [y] (x, y)> as B2.
+  (*ISSUE: WIll this really work if there were e.g. two pair arguments?*)
+  assert (B = <fun p => `B2 [p] (proj1 p) (proj2 p)>) as Bdef. {
+    subst B2.
+    normalize.
+    rewrite <- SP.
+    rewrite <- eta.
+    reflexivity.
+  }
+  clear HeqB2.
+  subst B.
+  normalize_in H0.
+  (* I might be able to make an inductive relation that can pull lifts up through a term *)
+  apply pattern_direction1 in H0.
+Abort.
+(* TODO: This needs to work. *)
+
+Theorem simpler_thing_that_is_needed_first
+        (t1 t2 : QTerm)
+        (H : <fun x => `t1 [x]> = <fun x => `t2 [x]>)
+  : t1 = t2.
+Proof.
+  lambda_solve.
+  apply (f_equal (fun t => <`t [x/DUMMY]>)) in H.
+  normalize_in H.
+  assumption.
+  (* TODO: This needs to work as part of lambda_solve*)
+Qed.
+
+(*
+Idea to maybe improve performance:
+Could I wrap lambda_solve in a procedure which makes a local theorem, uses lambda_solve,
+and then finishes the theorem with Qed so that the proof term is not remembered?
+That way it would not have such long equality proof terms in things.
+Does this still sneak the term in there somewhere?
+*)
