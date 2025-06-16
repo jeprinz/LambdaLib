@@ -51,9 +51,9 @@ Proof.
   apply lift_lift.
 Qed.
 
-(* Later: I realized that there is a simple way to do this in O(n) instead of O(n^2). Just use a
-rewrite to mark the specific lift we are looking for, and pull that up
-(wait no, at best that can get ones with the same string but its nontrivial to know if same index)*)
+(*
+TODO: This can be done better with UnWeaken.
+*)
 Ltac fix_subst_lifts :=
   repeat (
   repeat (
@@ -588,8 +588,22 @@ Ltac rewriteIntoCase :=
           try rewrite <- (UnWeaken_prop unweaken) in *;
           clear unweaken
         ];
-      apply pattern_direction1 in H;
-      simpl in H
+      simpl in H;
+      apply pattern_direction1 in H
+  | H : qterm.app ?t1 (pair ?l ?r) = ?t2 |- _ =>
+      let t' := fresh "t'" in
+      let F := fresh "F" in
+      pose (t' := <fun x => fun y => `t1 [x] [y] (x, y)>);
+      assert (t1 = <fun p => `t' [p] (proj1 p) (proj2 p)>); [
+          subst t';
+          normalize;
+          rewrite <- SP;
+          rewrite <- eta;
+          reflexivity
+        |
+          
+        ]
+      
   end.
 
 Theorem pattern_case_first_test
@@ -638,36 +652,46 @@ Proof.
   rewriteIntoCase.
   rewriteIntoCase.
   assumption.
-Qed.  
+Qed.
+
+Theorem pattern_case_4
+        (t1 t2 : QTerm)
+        (H : <{lift "x" 1 <`t1 [x]>} x> = t2)
+  : <`t1 [x]> = <fun x => `t2>.
+Proof.
+  rewriteIntoCase.
+  assumption.
+Qed.
 
 Theorem pattern_case_pair
         (t1 t2 : QTerm)
         (H : <`t1 [x] [y] (x, y)> = t2)
   : <`t1> = <fun p => `t2 [p] [x/ proj1 p] [y / proj2 p]>.
 Proof.
-  remember <fun x => fun y => `t1 [x] [y] (x, y)> as t1'.
-  assert (t1 = <fun p => `t1' [p] (proj1 p) (proj2 p)>). {
-    lambda_solve.
-    normalize.
-    rewrite <- SP.
-    rewrite <- eta.
-    reflexivity.
-  }
-  clear Heqt1'.
-  (**)
-  rewrite H0 in H.
-  normalize_in H.
-  repeat rewriteIntoCase.
-  subst t1'.
-  normalize_in H0.
-  (*
-  lambda_solve.
-  normalize.
-  reflexivity.
-   *)
-  (* TODO: This needs to be done automatically. *)
-  assumption.
-Qed.
+  (*pose (t' := <fun x => fun y => `t1 [x] [y] (x, y)>).*)
+  match goal with
+  | H : qterm.app ?t1 (pair ?l ?r) = ?t2 |- _ =>
+      let t' := fresh "t'" in
+      let lhs := fresh "lhs" in
+      let lhsdef := fresh "lhsdef" in
+      let F := fresh "F" in
+      remember t1 as lhs eqn: lhsdef in H;
+      pose (t' := <fun x => fun y => `lhs [x] [y] (x, y)>);
+      assert (t1 = <fun p => `t' [p] (proj1 p) (proj2 p)>) as F; [
+          subst t';
+          normalize;
+          rewrite <- SP;
+          rewrite <- eta;
+          symmetry;
+          exact lhsdef
+        |
+          subst lhs;
+          rewrite F in H;
+          normalize_in H
+        ]
+  end.
+  clearbody t'.
+Abort.
 
 
 Theorem pattern_case_pair_2
@@ -701,7 +725,6 @@ Theorem pi_injectivity
   subst B.
   normalize_in H0.
   (* I might be able to make an inductive relation that can pull lifts up through a term *)
-  apply pattern_direction1 in H0.
 Abort.
 (* TODO: This needs to work. *)
 
