@@ -38,8 +38,6 @@ Proof.
 Qed.
 
 Theorem swap_marked_lift : forall (s1 s2 : string) (i1 i2 : nat) (t : QTerm),
-(*    (Mark lift) s1 i1 (lift s2 i2 t) =
-      lift s2 (if (s1 =? s2)%string then S i2 else i2) ((Mark lift) s1 i1 t).*)
     (Mark lift) s1 i1 (lift s2 i2 t) =
       (if eqb s1 s2
        then if Nat.ltb i2 i1
@@ -51,30 +49,44 @@ Proof.
   apply lift_lift.
 Qed.
 
-(*
-TODO: This can be done better with UnWeaken.
-*)
-Ltac fix_subst_lifts :=
-  repeat (
-  repeat (
-      (* First, cancel any substs and lifts that already match*)
-      repeat rewrite subst_lift;
-      (* Next, mark any lifts under a subst as being the wrong one *)
-      repeat rewrite mark_stuck;
-      (* Next, push the marked lift down *)
-      repeat (rewrite swap_marked_lift ; simpl)
-    );
-  (* When we are done, remove Mark *)
-  repeat rewrite MarkIsJustId).
+Ltac fix_subst_lift :=
+  first [
+      (* First, see if a lift can be immediately canceled with a subst *)
+      rewrite subst_lift
+    |
+      (* If not, mark a lift under a subst *)
+      rewrite mark_stuck;
+      (* Next, push the marked lift down. It is crucial that this fails if it can't,
+       because that implies that the lift was not found. If it didn't fail, then this tactic
+       could succeed but only re-order lifts, which would cause an infinite loop if inside
+       a repeat tactical. *)
+      (rewrite swap_marked_lift; simpl); repeat (rewrite swap_marked_lift; simpl);
+      (* Finally, recur. It only succeeds if subst_lift eventually works. *)
+      fix_subst_lift
+    ];
+  (* When we are done, remove Mark. *)
+  repeat rewrite MarkIsJustId.
 
-Ltac fix_subst_lifts_in H :=
-  repeat (repeat (
-      repeat rewrite subst_lift in H;
-      repeat rewrite mark_stuck in H;
-      repeat (rewrite swap_marked_lift in H ; simpl in H)
-    );
-  repeat rewrite MarkIsJustId in H).
+Ltac fix_subst_lifts := repeat fix_subst_lift.
 
+Ltac fix_subst_lift_in H :=
+  first [
+      rewrite subst_lift in H
+    |
+      rewrite mark_stuck in H;
+      (rewrite swap_marked_lift in H; simpl in H); repeat (rewrite swap_marked_lift in H; simpl in H);
+      fix_subst_lift_in H
+    ];
+  repeat rewrite MarkIsJustId in H.
+
+Ltac fix_subst_lifts_in H := repeat fix_subst_lift_in H.
+  
+
+Theorem test_not_infinite_loop :
+  <X [a] [b] [c/d]> = <Y>.
+Proof.
+  Fail fix_subst_lift.
+Abort.
 
 Ltac compute_lifts := repeat (try (rewrite lift_lam ; simpl) ;
                               try rewrite lift_app;
@@ -300,20 +312,6 @@ Theorem test_unequal_neutrals
     : False.
 Proof.
   solve_neutral_unequal_case.
-  (*destruct consistency as [t1 temp]. destruct temp as [t2 H2].
-  exfalso.
-  apply H2.
-
-
-  assert (<(a b) [a / fun x => `t1 [c] [x]] [c / `t2]>
-          = <c [a / fun x => `t1 [c] [x]] [c / `t2]>).
-
-  rewrite H.
-  reflexivity.
-  normalize_in H1.
-  repeat fix_subst_lifts_in H1.
-  apply H1.
-   *)
 Qed.
 
 Theorem test_shadowed_application
@@ -682,6 +680,7 @@ Inductive FindSubTo : QTerm -> QTerm -> (QTerm -> QTerm) -> Prop :=
 | fst_pair : forall t1 t2 out sub1 sub2,
     FindSubTo t1 <proj1 `out> sub1
     -> FindSubTo (sub1 t2) <proj2 `out> sub2
+    (*-> FindSubTo t2 <proj2 `out> sub2*)
     -> FindSubTo (pair t1 t2) out (fun t => sub2 (sub1 t))
 .
 
@@ -707,8 +706,8 @@ Theorem pattern_case_pair
         (H : <`t1 [x] [y] (x, y)> = t2)
   : <`t1> = <fun p => `t2 [p] [x/ proj1 p] [y / proj2 p]>.
 Proof.
-  pair_pattern_case.
-  simple_pattern_case.
+  Time pair_pattern_case.
+  Time simple_pattern_case.
   assumption.
 Qed.  
 
@@ -723,10 +722,24 @@ Proof.
   simple_pattern_case.
   compute_subst_in H.
   subst.
-  normalize.
   lambda_solve.
-  compute_subst.
-  normalize.
+  repeat (
+  repeat rewrite mark_stuck;
+  repeat rewrite swap_marked_lift; simpl
+  ).
+
+  repeat (
+      (* First, cancel any substs and lifts that already match*)
+      repeat rewrite subst_lift;
+      (* Next, mark any lifts under a subst as being the wrong one *)
+      repeat rewrite mark_stuck;
+      (* Next, push the marked lift down *)
+      repeat (rewrite swap_marked_lift ; simpl)
+    );
+  (* When we are done, remove Mark *)
+  repeat rewrite MarkIsJustId.
+
+  fix_subst_lifts.
 Abort.
 
 (* Pi injectivity should work, but I think it requires the special cases *)
