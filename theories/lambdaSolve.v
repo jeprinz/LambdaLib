@@ -1,3 +1,4 @@
+
 Require Import String.
 Require Import -(coercions) qterm. (* TODO: Do I ever need the coeercion? This is very strange*)
 Require Import lambdaFacts.
@@ -701,12 +702,55 @@ Ltac pair_pattern_case :=
         ]
   end.
 
+(*
+The above pair_pattern_case tactic kind of works.
+However, it leaves behind substitutions. The idea is that if
+t1 (x, y) = t2, then
+t1 = \p. t2 [x / fst p] [y / snd p]
+The issue is that the automation in lambda_solve isn't really designed for substituions to be more than
+ephemeral; they are supposed to be gone after compute_substs.
+The problem shows up in pattern_case_pair_2, where the substitutions can't be dealt with.
+
+Instead, I'm going to try, given:
+t1 ... (a, b) = t2,
+substitute  t1 := fun ... p => t1' ... (fst p) (snd p)
+globally substitute out t1, and just work with t1' instead.
+*)
+
+(*
+Given something like (t a b c), and given evars original, new, and toSub,
+FindPairCaseSub (t a b c) original new toSub
+->
+original = t
+toSub = fun a b c p => new a b c (fst p) (snd p)
+new = fun a b c l r => original a b c (l, r)
+
+and we get as a theorem that original = toSub
+
+
+(t a b c) => find t' such that t = fun a b c p => t' a b c (fst p) (snd p)
+(t a b) =>   find t' such that t = fun a b   p => t' a b   (fst p) (snd p)
+ *)
+(*
+Inductive FindPairCaseSub : QTerm -> QTerm -> QTerm -> QTerm -> Prop :=
+| fpcs_app : forall,
+    FindPairCaseSub rest original new toSub
+    -> FindPairCaseSub (app rest arg) original new <fun x => `toSub [x] x>
+.
+ *)
+(*
+GetMVAndArgs (t [x] a [y] b c) t [a, x, b, y, c]
+ *)
+Inductive GetMVAndArgs : QTerm -> QTerm -> list (QTerm + (string * nat)) -> Prop :=
+
+.
+
 Theorem pattern_case_pair
         (t1 t2 : QTerm)
         (H : <`t1 [x] [y] (x, y)> = t2)
   : <`t1> = <fun p => `t2 [p] [x/ proj1 p] [y / proj2 p]>.
 Proof.
-  Time pair_pattern_case.
+  pair_pattern_case.
   Time simple_pattern_case.
   assumption.
 Qed.  
@@ -723,24 +767,16 @@ Proof.
   compute_subst_in H.
   subst.
   lambda_solve.
-  repeat (
-  repeat rewrite mark_stuck;
-  repeat rewrite swap_marked_lift; simpl
-  ).
-
-  repeat (
-      (* First, cancel any substs and lifts that already match*)
-      repeat rewrite subst_lift;
-      (* Next, mark any lifts under a subst as being the wrong one *)
-      repeat rewrite mark_stuck;
-      (* Next, push the marked lift down *)
-      repeat (rewrite swap_marked_lift ; simpl)
-    );
-  (* When we are done, remove Mark *)
-  repeat rewrite MarkIsJustId.
-
-  fix_subst_lifts.
+  (*
+    The problem is that there are substs that will stick around.
+    I didn't really design the automation to handle that; instead, metavars are supposed to
+    be in closed scope.
+   *)
 Abort.
+(*
+So the pair case needs to be fixed to work more generally.
+For now though, I'll just work with it.
+*)
 
 (* Pi injectivity should work, but I think it requires the special cases *)
 Theorem pi_injectivity
@@ -751,22 +787,14 @@ Theorem pi_injectivity
   lambda_solve.
   repeat neutral_inj_case.
   lambda_solve.
-  apply pattern_direction1 in H1.
+  simple_pattern_case.
   lambda_solve.
-  remember <fun x => fun y => `B [x] [y] (x, y)> as B2.
-  (*ISSUE: WIll this really work if there were e.g. two pair arguments?*)
-  assert (B = <fun p => `B2 [p] (proj1 p) (proj2 p)>) as Bdef. {
-    subst B2.
-    normalize.
-    rewrite <- SP.
-    rewrite <- eta.
-    reflexivity.
-  }
-  clear HeqB2.
-  subst B.
-  normalize_in H0.
-  (* I might be able to make an inductive relation that can pull lifts up through a term *)
-Abort.
+  Time pair_pattern_case.
+  simple_pattern_case.
+  lambda_solve.
+  repeat rewrite <- eta.
+  auto.
+Qed.
 (* TODO: This needs to work. *)
 
 Theorem simpler_thing_that_is_needed_first

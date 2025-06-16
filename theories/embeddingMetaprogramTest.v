@@ -153,9 +153,8 @@ Proof.
   assumption.
 Qed.
 
-(* THIS IS WRONG, there shouldn't be a weakening I think? *)
+(*
 Axiom fact1 : forall (t1 t2 : QTerm) s, <`t1 [`s] {var s 0}> = t2 -> t1 = <fun `s => `t2>.
-Locate "[".
 Axiom fact2 : forall (t1 t2 : QTerm) s1 s2, <`t1 [`s1] [`s2] ({var s1 0}, {var s2 0})> = t2
                                             -> t1 = <fun p => `t2 [`s1 / proj1 p] [`s1 / proj2 p]>.
 
@@ -167,6 +166,8 @@ Ltac solve_all_2 := repeat (subst; solve_all;
                                        (pair (var ?s1 ?i1) (var ?s2 ?i2)))
                                   = ?t2 |- _ => apply fact2 in H
                             end).
+ *)
+Ltac solve_all_2 := repeat (subst; solve_all; try simple_pattern_case; try pair_pattern_case).
 
 (*TODO: can prove from UIP? *)
 Axiom cast_remover : forall A (p : A = A) (a : A), @defer_cast A A p a = a.
@@ -184,8 +185,6 @@ Definition match_on_id' {ctx T t: QTerm} {lvl} (prog : Typed ctx lvl T t)
       | ty_lambda t' => fun _ _ _ => (existT _ _ (defer_cast t'))
       end
     );try solve[intros; solve_all_2].
-  
-
   (*
     t1 x = t2
     <->
