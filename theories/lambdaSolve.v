@@ -577,7 +577,7 @@ Proof.
 Qed.
 
 (* rewrites a premise (t1 x = t2) into (t1' [x] x = t2*)
-Ltac rewriteIntoCase :=
+Ltac simple_pattern_case :=
   match goal with
   | H : qterm.app ?t1 (var ?s ?i) = ?t2 |- _ =>
       let unweaken := fresh "unweaken" in
@@ -590,6 +590,7 @@ Ltac rewriteIntoCase :=
         ];
       simpl in H;
       apply pattern_direction1 in H
+  (*
   | H : qterm.app ?t1 (pair ?l ?r) = ?t2 |- _ =>
       let t' := fresh "t'" in
       let F := fresh "F" in
@@ -603,7 +604,7 @@ Ltac rewriteIntoCase :=
         |
           
         ]
-      
+   *)
   end.
 
 Theorem pattern_case_first_test
@@ -611,7 +612,7 @@ Theorem pattern_case_first_test
         (H : <`t1 [x] C1 C2 x> = t2)
   : <`t1 C1 C2> = <fun x => `t2>.
 Proof.
-  rewriteIntoCase.
+  simple_pattern_case.
   easy.
 Qed.
 
@@ -631,7 +632,7 @@ Theorem pattern_case
         (H : <`t1 [x] x> = t2)
   : t1 = <fun x => `t2>.
 Proof.
-  rewriteIntoCase.
+  simple_pattern_case.
   assumption.
 Qed.
 
@@ -640,7 +641,7 @@ Theorem pattern_case_2
         (H : <`t1 [x] [y] x> = t2)
   : <`t1 [y]> = <fun x => `t2>.
 Proof.
-  rewriteIntoCase.
+  simple_pattern_case.
   assumption.
 Qed.
 
@@ -649,8 +650,8 @@ Theorem pattern_case_3
         (H : <`t1 [y] [x] x y> = t2)
   : <`t1> = <fun x => fun y => `t2>.
 Proof.
-  rewriteIntoCase.
-  rewriteIntoCase.
+  simple_pattern_case.
+  simple_pattern_case.
   assumption.
 Qed.
 
@@ -659,46 +660,73 @@ Theorem pattern_case_4
         (H : <{lift "x" 1 <`t1 [x]>} x> = t2)
   : <`t1 [x]> = <fun x => `t2>.
 Proof.
-  rewriteIntoCase.
+  simple_pattern_case.
   assumption.
 Qed.
+
+Theorem pattern_case_5
+        (t1 t2 : QTerm)
+        (H: <`t1 [x] x x> = t2)
+  : True.
+  Fail simple_pattern_case. (* testing to make sure it doesn't change the proof state. *)
+  auto.
+Qed.
+
+(*
+If FindSubTo t1 t2 sub, then sub t1 = t2.
+*)
+Check subst.
+Inductive FindSubTo : QTerm -> QTerm -> (QTerm -> QTerm) -> Prop :=
+| fst_var : forall i s out, FindSubTo (var s i) out (subst s i out)
+(* It should be possible to handle fst and snd cases if I need to *)
+| fst_pair : forall t1 t2 out sub1 sub2,
+    FindSubTo t1 <proj1 `out> sub1
+    -> FindSubTo (sub1 t2) <proj2 `out> sub2
+    -> FindSubTo (pair t1 t2) out (fun t => sub2 (sub1 t))
+.
+
+Ltac pair_pattern_case :=
+  match goal with
+  | H : ?t1 (pair ?l ?r) = ?t3 |- _ =>
+      let temp := fresh "temp" in
+      let sub := open_constr:((_:QTerm -> QTerm)) in
+      apply (f_equal (fun t => <`t [p]>)) in H;
+      compute_subst_in H;
+      assert (FindSubTo (pair l r) <p> sub) as temp; [
+          repeat (compute_subst; constructor)
+        |
+          apply (f_equal (fun t => sub t)) in H;
+          compute_subst_in H;
+          repeat rewrite <- SP in H;
+          clear temp
+        ]
+  end.
 
 Theorem pattern_case_pair
         (t1 t2 : QTerm)
         (H : <`t1 [x] [y] (x, y)> = t2)
   : <`t1> = <fun p => `t2 [p] [x/ proj1 p] [y / proj2 p]>.
 Proof.
-  (*pose (t' := <fun x => fun y => `t1 [x] [y] (x, y)>).*)
-  match goal with
-  | H : qterm.app ?t1 (pair ?l ?r) = ?t2 |- _ =>
-      let t' := fresh "t'" in
-      let lhs := fresh "lhs" in
-      let lhsdef := fresh "lhsdef" in
-      let F := fresh "F" in
-      remember t1 as lhs eqn: lhsdef in H;
-      pose (t' := <fun x => fun y => `lhs [x] [y] (x, y)>);
-      assert (t1 = <fun p => `t' [p] (proj1 p) (proj2 p)>) as F; [
-          subst t';
-          normalize;
-          rewrite <- SP;
-          rewrite <- eta;
-          symmetry;
-          exact lhsdef
-        |
-          subst lhs;
-          rewrite F in H;
-          normalize_in H
-        ]
-  end.
-  clearbody t'.
-Abort.
-
+  pair_pattern_case.
+  simple_pattern_case.
+  assumption.
+Qed.  
 
 Theorem pattern_case_pair_2
         (t1 t2 : QTerm)
         (H : <`t1 [x] [y] [z] [w] (x, y) (z, w)> = t2)
-  : <`t1> = <fun p1 => fun p2 => `t2 [x/ proj1 p1] [y / proj2 p1] [z / proj1 p2] [z / proj2 p2]>.
+  : <`t1> = <fun p1 => fun p2 => `t2 [p1] [p2] [x/ proj1 p1] [y / proj2 p1] [z / proj1 p2] [z / proj2 p2]>.
 Proof.
+  pair_pattern_case.
+  simple_pattern_case.
+  pair_pattern_case.
+  simple_pattern_case.
+  compute_subst_in H.
+  subst.
+  normalize.
+  lambda_solve.
+  compute_subst.
+  normalize.
 Abort.
 
 (* Pi injectivity should work, but I think it requires the special cases *)
@@ -747,4 +775,3 @@ and then finishes the theorem with Qed so that the proof term is not remembered?
 That way it would not have such long equality proof terms in things.
 Does this still sneak the term in there somewhere?
 *)
- 
