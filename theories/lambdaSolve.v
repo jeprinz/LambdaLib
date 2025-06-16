@@ -1,6 +1,7 @@
 Require Import String.
 Require Import -(coercions) qterm. (* TODO: Do I ever need the coeercion? This is very strange*)
 Require Import lambdaFacts.
+Require Import Lia.
 
 (*
 The goal of these tactics is to reduce terms to a normal form.
@@ -50,6 +51,9 @@ Proof.
   apply lift_lift.
 Qed.
 
+(* Later: I realized that there is a simple way to do this in O(n) instead of O(n^2). Just use a
+rewrite to mark the specific lift we are looking for, and pull that up
+(wait no, at best that can get ones with the same string but its nontrivial to know if same index)*)
 Ltac fix_subst_lifts :=
   repeat (
   repeat (
@@ -466,22 +470,211 @@ Proof.
   lambda_solve.
 Qed.
 
+(*
+Plan for tactic to solve pattern cases:
+First, start with the non-pair case.
+- make a tactic which can try to take a term, and rewrite it in the form t[x] for some given x.
+ *)
+
+Search (nat -> nat -> Prop).
+Locate "<>".
+(*
+The ideas is that UnWeaken t1 s i t2 -> t1 = t2 [s@i]
+I only need this to work for patterns like t [x...r] x y (z, w) (q, r) = t2,
+where t is a metavar, and the rest are vars.
+ *)
+Check lift_lift.
+Inductive UnWeaken : QTerm -> string -> nat -> QTerm -> Prop :=
+| uw_lift_itself : forall t s i, UnWeaken (lift s i t) s i t
+| uw_other_var : forall s1 i1 s2 i2, (or (s1 <> s2) (lt i1 i2)) -> UnWeaken (var s1 i1) s2 i2 (var s1 i1)
+| uw_app : forall t1 t2 t1' t2' s i,
+    UnWeaken t1 s i t1'
+    -> UnWeaken t2 s i t2'
+    -> UnWeaken (app t1 t2) s i (app t1' t2')
+| uw_pair : forall t1 t2 t1' t2' s i,
+    UnWeaken t1 s i t1'
+    -> UnWeaken t2 s i t2'
+    -> UnWeaken (pair t1 t2) s i (pair t1' t2')
+| uw_lift_lift : forall t t' s1 i1 s2 i2,
+    eqb s2 s1 = false \/ Nat.eqb i1 i2 = false (* if they are equal, then other constructor handles it*)
+    -> UnWeaken t s2 (if (eqb s2 s1) then if (Nat.ltb i1 i2) then pred i2 else i2 else i2) t'
+    (*UnWeaken t s2 (if (eqb s2 s1)
+                   then if (Nat.ltb i1 i2) then pred i2 else
+                          if Nat.eqb i1 i2 then 15 else 20(*i2*)
+                   else i2) t'*)
+             (* some conditions relating s1 s2 i1 i2*)
+    -> UnWeaken (lift s1 i1 t)
+                (* This chunk is from lift_lift*)
+                s2
+                i2
+                (lift s1
+                      (if (eqb s2 s1) then if (Nat.ltb i1 i2) then i1 else pred i1 else i1)
+                      (*(if (eqb s2 s1)
+                       then if (Nat.ltb i1 i2) then i1 else if Nat.eqb i1 i2 then i1 else 30(*pred i1*)
+                       else i1)*)
+                      t')
+
+.
+
+Theorem nat_gt_lt_lemma : forall a b, Nat.ltb a b = false -> Nat.eqb a b = false
+                                      -> Nat.ltb (Nat.pred a) b = false
+                                         /\ S (pred a) = a.
+Proof.
+  intros.
+  apply PeanoNat.Nat.ltb_nlt in H.
+  apply PeanoNat.Nat.eqb_neq in H0.
+  rewrite PeanoNat.Nat.ltb_nlt.
+  lia.
+Qed.
+
+Theorem UnWeaken_prop : forall {t1 s i t2}, UnWeaken t1 s i t2 -> lift s i t2 = t1.
+Proof.
+  intros.
+  induction H.
+  - reflexivity.
+  - normalize.
+    Check eqb_neq.
+    destruct H.
+    + 
+      assert ((s2 =? s1)%string = false). {
+        rewrite eqb_neq.
+        easy.
+      }
+      rewrite H0.
+      simpl.
+      reflexivity.
+    +
+      Search [lt Nat.ltb].
+      Check PeanoNat.Nat.ltb_lt.
+      assert ((Nat.ltb i1 i2)%bool = true). {
+        rewrite PeanoNat.Nat.ltb_lt.
+        assumption.
+      }
+      rewrite H0.
+      simpl.
+      Search (andb).
+      rewrite Bool.andb_false_r.
+      reflexivity.
+  - lambda_solve.
+    normalize.
+    reflexivity.
+  - subst.
+    normalize.
+    reflexivity.
+  - subst t.
+    Check lift_lift.
+    rewrite lift_lift.
+    destruct (eqb s2 s1).
+    + destruct (Nat.ltb i1 i2) eqn:F.
+      * rewrite F.
+        reflexivity.
+      * Check PeanoNat.Nat.lt_lt_pred.
+        destruct H; try easy.
+        -- destruct (nat_gt_lt_lemma _ _ F H).
+           rewrite H1, H2.
+           reflexivity.
+    + reflexivity.
+Qed.
+
+(* rewrites a premise (t1 x = t2) into (t1' [x] x = t2*)
+Ltac rewriteIntoCase :=
+  match goal with
+  | H : qterm.app ?t1 (var ?s ?i) = ?t2 |- _ =>
+      let unweaken := fresh "unweaken" in
+      let t1' := open_constr:((_:QTerm)) in
+      assert (UnWeaken t1 s i t1') as unweaken; [
+        solve [repeat (constructor; try easy)]
+        |
+          try rewrite <- (UnWeaken_prop unweaken) in *;
+          clear unweaken
+        ];
+      apply pattern_direction1 in H;
+      simpl in H
+  end.
+
+Theorem pattern_case_first_test
+        (t1 t2 : QTerm)
+        (H : <`t1 [x] C1 C2 x> = t2)
+  : <`t1 C1 C2> = <fun x => `t2>.
+Proof.
+  rewriteIntoCase.
+  easy.
+Qed.
+
+
+(* Might I as not well just use this kind of approach to do the whole thing at once?
+Something like PatternCase : QTerm -> 
+PatternCase t1 x t2 res -> (t1 = t2 -> x = res)
+Where x is the metavar all the way at the left?
+I'll at least do the simpler version first.
+ *)
+
+Ltac constructor_loop :=
+  constructor; solve [easy; constructor_loop].
+
 Theorem pattern_case
         (t1 t2 : QTerm)
         (H : <`t1 [x] x> = t2)
   : t1 = <fun x => `t2>.
 Proof.
-  apply pattern_direction1 in H.
+  rewriteIntoCase.
   assumption.
-  (*TODO: put into automation*)
-Abort.
+Qed.
 
 Theorem pattern_case_2
         (t1 t2 : QTerm)
         (H : <`t1 [x] [y] x> = t2)
   : <`t1 [y]> = <fun x => `t2>.
 Proof.
-  
+  rewriteIntoCase.
+  assumption.
+Qed.
+
+Theorem pattern_case_3
+        (t1 t2 : QTerm)
+        (H : <`t1 [y] [x] x y> = t2)
+  : <`t1> = <fun x => fun y => `t2>.
+Proof.
+  rewriteIntoCase.
+  rewriteIntoCase.
+  assumption.
+Qed.  
+
+Theorem pattern_case_pair
+        (t1 t2 : QTerm)
+        (H : <`t1 [x] [y] (x, y)> = t2)
+  : <`t1> = <fun p => `t2 [p] [x/ proj1 p] [y / proj2 p]>.
+Proof.
+  remember <fun x => fun y => `t1 [x] [y] (x, y)> as t1'.
+  assert (t1 = <fun p => `t1' [p] (proj1 p) (proj2 p)>). {
+    lambda_solve.
+    normalize.
+    rewrite <- SP.
+    rewrite <- eta.
+    reflexivity.
+  }
+  clear Heqt1'.
+  (**)
+  rewrite H0 in H.
+  normalize_in H.
+  repeat rewriteIntoCase.
+  subst t1'.
+  normalize_in H0.
+  (*
+  lambda_solve.
+  normalize.
+  reflexivity.
+   *)
+  (* TODO: This needs to be done automatically. *)
+  assumption.
+Qed.
+
+
+Theorem pattern_case_pair_2
+        (t1 t2 : QTerm)
+        (H : <`t1 [x] [y] [z] [w] (x, y) (z, w)> = t2)
+  : <`t1> = <fun p1 => fun p2 => `t2 [x/ proj1 p1] [y / proj2 p1] [z / proj1 p2] [z / proj2 p2]>.
+Proof.
 Abort.
 
 (* Pi injectivity should work, but I think it requires the special cases *)
@@ -531,3 +724,4 @@ and then finishes the theorem with Qed so that the proof term is not remembered?
 That way it would not have such long equality proof terms in things.
 Does this still sneak the term in there somewhere?
 *)
+ 

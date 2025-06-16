@@ -23,17 +23,35 @@ Inductive PseudoNeutral : QTerm -> Prop :=
 | neu_const : forall {T} {s : T}, PseudoNeutral (const s)
 | neu_app : forall {t1 t2}, PseudoNeutral t1 -> PseudoNeutral (app t1 t2).
 
+Lemma subst_lift_cancel : forall t s i, subst s i (var s i) (lift s (S i) t) = t.
+Proof.
+  (* This seems true? Do I need to add it to qterm? *)
+Admitted.
+  
+
 Theorem lamInj : forall t1 t2 s, <fun `s => `t1> = <fun `s => `t2> -> t1 = t2.
 Proof.
   intros.
+  apply (f_equal (fun t => <`t [`s]>)) in H.
+  repeat rewrite lift_lam in H.
+  repeat rewrite eqb_refl in H.
+  apply (f_equal (fun t => <`t {var s 0}>)) in H.
+  repeat rewrite beta in H.
+
+  repeat rewrite subst_lift_cancel in H.
+  assumption.
+  (*
   pose (var s 0) as x.
   assert (<(fun `s => `t1) `x> = <(fun `s => `t2) `x>).
   rewrite H.
   reflexivity.
   unfold x in H0.
   repeat rewrite beta in H0.
+   *)
   (* I don't think that this can be proven in this way. *)
-Admitted.
+Qed.
+
+Print Assumptions lamInj.
 
 (* TODO: For now, this will be an axiom. Later I will prove from confluence hopefully *)
 Axiom constInj : forall {T : Type} (t1 t2 : T), const t1 = const t2 -> t1 = t2.
