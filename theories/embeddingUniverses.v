@@ -5,16 +5,16 @@ Require Import lambdaSolve.
 Require Import FunctionalExtensionality.
 Require Import Coq.Logic.PropExtensionality.
 
+(* Contexts *)
 Definition nil := <Nil>.
 Definition cons := <fun ctx => fun lvl => fun ty => Cons ctx lvl ty>.
 
+(* Variables *)
 Definition zero := <fun env => proj2 env>.
 Definition succ := <fun x => fun env => x (proj1 env)>.
 
-Definition level (n : nat) : QTerm := const n.
-(* Should I have an explicit type level on the pis? *)
 Definition pi := <fun x => fun y => fun env => Pi (x env) (fun a => y (env , a))>.
-Definition U : QTerm := <(*fun lvl => *)fun env => U (*lvl*)>.
+Definition U : QTerm := <fun env => U>.
 Definition Empty := <fun env => Empty>.
 Definition Bool := <fun env => Bool>.
 Definition Lift := <fun T => fun env => Lift (T env)>.
@@ -41,7 +41,7 @@ Inductive VarTyped : QTerm -> nat -> QTerm -> QTerm -> Prop :=
 
 Inductive Typed : (*context*) QTerm -> (*level*) nat -> (*Type*) QTerm -> (*Term*) QTerm -> Prop :=
 | ty_lambda : forall ctx A B s lvl,
-    Typed ctx (S lvl) <`U(*{const lvl}*)> <`pi `A `B> ->
+    Typed ctx (S lvl) <`U> <`pi `A `B> ->
     Typed <`cons `ctx {const lvl} `A> lvl B s -> Typed ctx lvl <`pi `A `B> <`lambda `s>
 | ty_app : forall ctx A B s1 s2 lvl, Typed ctx lvl <`pi `A `B> s1 -> Typed ctx lvl A s2
                                  -> Typed ctx lvl <`subLast `B `s2> <`app `s1 `s2>
@@ -53,13 +53,12 @@ Inductive Typed : (*context*) QTerm -> (*level*) nat -> (*Type*) QTerm -> (*Term
     Typed ctx lvl <`subLast `T `true> t1 ->
     Typed ctx lvl <`subLast `T `false> t2 ->
     Typed ctx lvl <`subLast `T `cond> <`ifexpr `cond `t1 `t2>
-| ty_Empty : forall ctx, Typed ctx 1 <`U(*{const 0}*)> Empty
-| ty_Bool : forall ctx, Typed ctx 1 <`U(*{const 0}*)> Bool
+| ty_Empty : forall ctx, Typed ctx 1 <`U> Empty
+| ty_Bool : forall ctx, Typed ctx 1 <`U> Bool
 | ty_pi : forall ctx A B lvl,
-    Typed ctx (S lvl) <`U(*{const lvl}*)> A
-    (* TODO: is S lvl correct below? *)
-    -> Typed <`cons `ctx {const lvl} `A> (S lvl) <`U(*{const lvl}*)> B -> Typed ctx (S lvl) <`U(*{const lvl}*)> <`pi `A `B>
-| ty_U : forall ctx lvl, Typed ctx (S (S lvl)) <`U(*{const (S lvl)}*)> <`U(*{const lvl}*)>
+    Typed ctx (S lvl) <`U)> A
+    -> Typed <`cons `ctx {const lvl} `A> (S lvl) <`U> B -> Typed ctx (S lvl) <`U> <`pi `A `B>
+| ty_U : forall ctx lvl, Typed ctx (S (S lvl)) <`U> <`U>
 | ty_Lift : forall ctx lvl T, Typed ctx (S lvl) <`U> T -> Typed ctx (S (S lvl)) <`U> <`Lift `T>
 | ty_lift : forall ctx lvl T t, Typed ctx lvl T t -> Typed ctx (S lvl) <`Lift `T> t
 | ty_lower : forall ctx lvl T t, Typed ctx (S lvl) <`Lift `T> t -> Typed ctx lvl T t
