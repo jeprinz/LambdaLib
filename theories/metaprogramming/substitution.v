@@ -142,10 +142,26 @@ intros lvl2 T2 t2 x.
 remember <`S.cons `ctx1 `lvl `T> as ctx in x.
 generalize dependent Heqctx.
 refine (match x with
-        | @zero _ _ n => fun _ => castVar (@zero ctx1 <`S.subTerm `sub `T> n)
-        | succ x' => _ (*castVar (succ (ren _ _ _ _))*)
-        end); intros; solve_all.
-refine (castVar (@zero ctx1 <`S.subTerm `sub `T> n)); solve_all.
+        | @zero _ _ n => fun _ => _ (*(@zero ctx1 <`S.subTerm `sub `T> n)*)
+        | succ x' => hole (*castVar (succ (ren _ _ _ _))*)
+        end); intros(*; solve_all*).
+refine (castVar zero).
+S.unfold_all.
+Print normalize.
+
+Print hide_evars_in_goal.
+Fail match goal with
+| |- context [ ?v : QTerm ] => idtac v; is_evar v; (let H := fresh v in
+                                                    pose (H := v); fold H)
+end.
+
+pose (H := ?Goal3).
+repeat (rewrite ?beta, ?betapi1, ?betapi2; compute_subst).
+unhide_evars_in_goal.
+
+Check ren.
+Compute (Ren sub ctx1 ctx2).
+Check (succ (ren _ _ _ x')).
 rewrite <- SP.
 
 (*

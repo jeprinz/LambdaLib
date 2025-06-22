@@ -55,6 +55,16 @@ Ltac hide_evar :=
   | [ |- context [ ?v ] ] => is_evar v; let H := fresh v in pose (H := v); fold H
   end.
 
+Ltac hide_evars_in_goal :=
+  repeat match goal with
+         | [ |- context [ ?v : nat ] ] => is_evar v; let H := fresh v in pose (H := v); fold H
+         end.
+
+Ltac unhide_evars_in_goal :=
+  repeat match goal with
+         | x := ?t : nat |- _ => is_evar t; subst x
+         end.
+
 Theorem testRewrite2 (x y z : nat) : (1 + x) + (1 + x) + (1 + y) + (1 + y) = 2.
   assert ((1 + x) + (1 + y) + (1 + y) + (1 + z) + (1 + z) = 2) as H by give_up.
   evar (ex : nat).
@@ -68,10 +78,46 @@ Theorem testRewrite2 (x y z : nat) : (1 + x) + (1 + x) + (1 + y) + (1 + y) = 2.
   rewrite H2 in *.
   unfold ex, ey, ez in *.
 
-  let H := fresh v in pose (H := ?ex).
-  fold v in *.
-  
-  hide_evar.
-  rewrite equality.
+  hide_evars_in_goal.
+  unhide_evars_in_goal.
+
+  unhide_evars_in_goal.
 Abort.
+
+Goal S 1 = 4.
+  match goal with
+  | |- context f [S ?X] =>
+      idtac X;
+      let ctx := fun x => context f[x] in
+      idtac ctx
+      (*let x := context f[0] in assert (x=x)*)
+  end.
   
+Check beta.
+Definition make_evar (t : QTerm) (H : <`t ((fun x => x) A)> = <B>) : True := I.
+
+Definition amnesia_cast {A B} (H : A = B) (a : A) : B.
+  subst.
+  exact a.
+Qed.
+
+Ltac rewriteBeta :=
+  match goal with
+  | |- context [app (lam ?x ?t1) ?t2] => idtac "yes"
+  end.
+Definition nothing {A} (a : A) : A := a.
+Theorem testRewrite3 : True.
+Proof.
+  refine (make_evar _ _).
+  rewriteBeta.
+  Check (f_equal _).
+  Check @beta.
+  match goal with
+  | |- context c [app (lam ?x ?t1) ?t2] =>
+      let cf := fun t => context c[t] in
+      (*apply (amnesia_cast (f_equal cf (@beta x t1 t2)))*)
+      idtac cf
+  end.
+  pose (cf := fun t => ?Goal t = <B>).
+  
+  rewrite beta.

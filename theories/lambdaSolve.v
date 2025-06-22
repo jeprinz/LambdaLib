@@ -1,4 +1,3 @@
-
 Require Import String.
 Require Import -(coercions) qterm. (* TODO: Do I ever need the coeercion? This is very strange*)
 Require Import lambdaFacts.
@@ -89,6 +88,24 @@ Proof.
   Fail fix_subst_lift.
 Abort.
 
+(*
+Due to an annoying problem with rewrite specializing metavariables, I need this workaround.
+For now, I'll only implement it for metavars in the goal (which is the common case)
+If necessary, I'll also implmenent it for metavars in hypotheses.
+Here is my stackexchange question where someone gave me this bit of Ltac:
+https://proofassistants.stackexchange.com/questions/5112/in-rocq-how-to-prevent-rewrite-from-specializing-existential-variables?noredirect=1#comment10128_5112
+ *)
+
+Ltac hide_evars_in_goal :=
+  repeat match goal with
+         | [ |- context [ ?v : QTerm ] ] => is_evar v; let H := fresh v in pose (H := v); fold H
+         end.
+
+Ltac unhide_evars_in_goal :=
+  repeat match goal with
+         | x := ?t : QTerm |- _ => is_evar t; subst x
+         end.
+
 Ltac compute_lifts := repeat (try (rewrite lift_lam ; simpl) ;
                               try rewrite lift_app;
                               try rewrite lift_pair;
@@ -119,7 +136,9 @@ Ltac compute_subst_in H := repeat (try rewrite subst_app in H;
                           try (rewrite subst_lam in H ; simpl in H ; compute_lifts_in H) ;
                           try (rewrite subst_var in H; simpl in H);
                                   compute_lifts_in H); fix_subst_lifts_in H.
-Ltac normalize := repeat (rewrite ?beta, ?betapi1, ?betapi2; compute_subst).
+Ltac normalize := hide_evars_in_goal;
+                  repeat (rewrite ?beta, ?betapi1, ?betapi2; compute_subst);
+                  unhide_evars_in_goal.
 Ltac normalize_in H := repeat (rewrite ?beta, ?betapi1, ?betapi2 in H; compute_subst_in H).
 
 (*
@@ -162,7 +181,8 @@ Ltac lambda_solve_step :=
       | H : lam ?s ?t1 = lam ?s ?t2 |- _ => apply lamInj in H
       | |- lam ?s ?t1 = lam ?s ?t2 => apply (f_equal (lam s))
       | H : lam ?s1 ?t1 = lam ?s2 ?t2 |- _ => rewrite (@alpha s1 s2 t1) in H; compute_subst_in H
-      | |- lam ?s1 ?t1 = lam ?s2 ?t2 => rewrite (@alpha s1 s2 t1); compute_subst
+      | |- lam ?s1 ?t1 = lam ?s2 ?t2 => rewrite (@alpha s1 s2 t1);
+                                        hide_evars_in_goal; compute_subst; unhide_evars_in_goal
       | H : var ?s1 0 = var ?s2 0 |- _ => apply varInj in H
       | H : const ?t1 = const ?t2 |- _ => apply constInj in H
       | H : @eq string ?s ?s |- _ => clear H
@@ -187,11 +207,14 @@ Ltac lambda_solve_step :=
                  | rewrite betapi1 in H ; compute_subst_in H
                  | rewrite betapi2 in H ; compute_subst_in H
                  ]
-      | |- _ => first [
-                   rewrite beta ; compute_subst
-                 | rewrite betapi1 ; compute_subst
-                 | rewrite betapi2 ; compute_subst
-                 ]
+      | |- _ =>
+          hide_evars_in_goal;
+          first [
+              rewrite beta ; compute_subst
+            | rewrite betapi1 ; compute_subst
+            | rewrite betapi2 ; compute_subst
+            ];
+          unhide_evars_in_goal
       end
     )
 .
@@ -816,3 +839,49 @@ and then finishes the theorem with Qed so that the proof term is not remembered?
 That way it would not have such long equality proof terms in things.
 Does this still sneak the term in there somewhere?
 *)
+
+
+(* Testing hide_evars_in_goal *)
+
+Theorem test_hide_evars (t : QTerm) :
+  <`t A> = <B>.
+Proof.
+  evar (et : QTerm).
+  assert (t = et) by give_up.
+  rewrite H.
+  unfold et.
+  hide_evars_in_goal.
+  Fail rewrite beta.
+Abort.
+(* So it works in this situation. But what if the evar resulted from another goal rather
+than being user defined? *)
+
+Definition evar_maker2 {t : QTerm}
+           (H : <`t A> = <(fun x => x) B>)
+  : True := I.
+
+Theorem test_hide_evars_2 : True.
+Proof.
+  refine (evar_maker2 _).
+  Print hide_evars_in_goal.
+  (* This is a possible solution. Would be very annoying though to redo
+    all the rewrites like this. *)
+  repeat match goal with
+  | |-  context [ app (lam ?x ?body) ?t2 ] => rewrite (@beta x body t2)
+  end.
+  hide_evars_in_goal.
+  Fail Fail rewrite beta.
+  (* It doesn't work!!!! I'm not sure how to fix this.*)
+Abort.
+
+Theorem equality : 1 + 1 = 2. Proof. reflexivity. Qed.
+
+Definition evar_maker (n : nat) (H : 1 + n = 2) : True := I.
+Theorem testRewrite' : True.
+Proof.
+  refine (evar_maker _ _).
+  (* Here the goal is "1 + ?Goal = 2"
+     the rewrite specializes ?Goal to 1*)
+  (*pose (H := ?Goal).*)
+  Fail Fail rewrite equality.
+Abort.
