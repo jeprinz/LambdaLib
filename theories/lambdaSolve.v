@@ -13,6 +13,17 @@ There should not be any lifts anywhere else or subst forms anywhere at all
 except during intermediate states.
  *)
 
+(* Due to an annoying issue with rewrite where it will specialize evars, I need to
+   make custom tactics to rewrite each thing that I might want rewritten that can't
+   specialize evars using a match. For now, these only replace the rewrites in the goal;
+   maybe in the future I can figure out how to do it for those in the context as well,
+   although for now the issue with evars seems to happen only in the goal. *)
+
+Ltac rewriteBeta :=
+  match goal with
+  | |- context [app (lam ?x ?t1) ?t2] => rewrite (@beta x t1 t2)
+  end.
+
 
 (* We need to hide Mark in a module so that it is not definitionally equal to its definition *)
 Module Type HowToHideMark.
@@ -49,18 +60,32 @@ Proof.
   apply lift_lift.
 Qed.
 
+Check subst_lift.
+Ltac rewrite_subst_lift :=
+  match goal with
+  | |- context [subst ?s ?i ?t1 (lift ?s ?i ?t2)] => rewrite (@subst_lift s i t1 t2)
+  end.
+Ltac rewrite_mark_stuck :=
+  match goal with
+  | |- context [subst ?s1 ?i1 ?t' (lift ?s2 ?i2 ?t)] => rewrite (@mark_stuck t s1 i1 s2 i2 t')
+  end.
+Check swap_marked_lift.
+Ltac rewrite_swap_marked_lift :=
+  match goal with
+  | |- context [Mark lift ?s1 ?i1 (lift ?s2 ?i2 ?t)] => rewrite (@swap_marked_lift s1 s2 i1 i2 t)
+  end.
 Ltac fix_subst_lift :=
   first [
       (* First, see if a lift can be immediately canceled with a subst *)
-      rewrite subst_lift
+      rewrite_subst_lift
     |
       (* If not, mark a lift under a subst *)
-      rewrite mark_stuck;
+      rewrite_mark_stuck;
       (* Next, push the marked lift down. It is crucial that this fails if it can't,
        because that implies that the lift was not found. If it didn't fail, then this tactic
        could succeed but only re-order lifts, which would cause an infinite loop if inside
        a repeat tactical. *)
-      (rewrite swap_marked_lift; simpl); repeat (rewrite swap_marked_lift; simpl);
+      (rewrite_swap_marked_lift; simpl); repeat (rewrite_swap_marked_lift; simpl);
       (* Finally, recur. It only succeeds if subst_lift eventually works. *)
       fix_subst_lift
     ];
@@ -88,39 +113,32 @@ Proof.
   Fail fix_subst_lift.
 Abort.
 
-(*
-Due to an annoying problem with rewrite specializing metavariables, I need this workaround.
-For now, I'll only implement it for metavars in the goal (which is the common case)
-If necessary, I'll also implmenent it for metavars in hypotheses.
-Here is my stackexchange question where someone gave me this bit of Ltac:
-https://proofassistants.stackexchange.com/questions/5112/in-rocq-how-to-prevent-rewrite-from-specializing-existential-variables?noredirect=1#comment10128_5112
- *)
-
-Ltac hide_evars_in_goal :=
+(* This needs to work like this instead of normal rewrites to prevent specializing evars *)
+Ltac compute_lifts :=
   repeat match goal with
-         | [ |- context [ ?v : QTerm ] ] => is_evar v; let H := fresh v in pose (H := v); fold H
+         | |- context [lift ?s ?i (lam ?x ?t)] => rewrite (@lift_lam s x i t); simpl
+         | |- context [lift ?s ?i (app ?t1 ?t2)] => rewrite (@lift_app s i t1 t2)
+         | |- context [lift ?s ?i (pair ?t1 ?t2)]=> rewrite (@lift_pair s i t1 t2)
+         | |- context [lift ?s ?i (pi1 ?t)] => rewrite (@lift_pi1 s i t)
+         | |- context [lift ?s ?i (pi2 ?t)] => rewrite (@lift_pi2 s i t)
+         | |- context [lift ?s1 ?k (var ?s2 ?i)] => rewrite (@lift_var s1 s2 i k); simpl
          end.
 
-Ltac unhide_evars_in_goal :=
-  repeat match goal with
-         | x := ?t : QTerm |- _ => is_evar t; subst x
-         end.
-
-Ltac compute_lifts := repeat (try (rewrite lift_lam ; simpl) ;
-                              try rewrite lift_app;
-                              try rewrite lift_pair;
-                              try rewrite lift_pi1;
-                              try rewrite lift_pi2;
-                              try (rewrite lift_var ; simpl)).
-
-Ltac compute_subst := repeat (try rewrite subst_app ;
-                              try rewrite subst_pair;
-                              try rewrite subst_pi1;
-                              try rewrite subst_pi2;
-                          try (rewrite subst_lam ; simpl ; compute_lifts) ;
-                          try (rewrite subst_var ; simpl);
-                               compute_lifts); fix_subst_lifts.
-(* Is there a way to not have this be repetetive with the above? *)
+Check subst_var.
+Ltac compute_subst :=
+  repeat (
+      try match goal with
+      | |- context [subst ?s ?i ?t3 (app ?t1 ?t2)] => rewrite (@subst_app s i t1 t2 t3)
+      | |- context [subst ?s ?i ?t (pair ?t1 ?t2)] => rewrite (@subst_pair s i t t1 t2)
+      | |- context [subst ?s ?i ?t1 (pi1 ?t2)] => rewrite (@subst_pi1 s i t1 t2)
+      | |- context [subst ?s ?i ?t1 (pi2 ?t2)] => rewrite (@subst_pi2 s i t1 t2)
+      | |- context [subst ?s2 ?i ?t2 (lam ?s1 ?t1)] =>
+          rewrite (@subst_lam s1 s2 i t1 t2); simpl; compute_lifts
+      | |- context [subst ?s1 ?k ?toSub (var ?s2 ?i)] =>
+          rewrite (@subst_var s1 s2 k i toSub); simpl
+      end;
+      compute_lifts);
+  fix_subst_lifts.
 
 Ltac compute_lifts_in H := repeat (try (rewrite lift_lam in H ; simpl in H) ;
                                    try rewrite lift_app in H;
@@ -135,37 +153,17 @@ Ltac compute_subst_in H := repeat (try rewrite subst_app in H;
                                    try rewrite subst_pi2 in H;
                           try (rewrite subst_lam in H ; simpl in H ; compute_lifts_in H) ;
                           try (rewrite subst_var in H; simpl in H);
-                                  compute_lifts_in H); fix_subst_lifts_in H.
-Ltac normalize := hide_evars_in_goal;
-                  repeat (rewrite ?beta, ?betapi1, ?betapi2; compute_subst);
-                  unhide_evars_in_goal.
+                                   compute_lifts_in H); fix_subst_lifts_in H.
+Check betapi1.
+Ltac normalize :=
+  repeat (try match goal with
+              | |- context [app (lam ?s ?t1) ?t2] => rewrite (@beta s t1 t2)
+              | |- context [pi1 (pair ?t1 ?t2)] => rewrite (@betapi1 t1 t2)
+              | |- context [pi2 (pair ?t1 ?t2)] => rewrite (@betapi2 t1 t2)
+              end;
+          compute_subst).
+Ltac normalize_old := repeat (rewrite ?beta, ?betapi1, ?betapi2; compute_subst).
 Ltac normalize_in H := repeat (rewrite ?beta, ?betapi1, ?betapi2 in H; compute_subst_in H).
-
-(*
-[x] - add pairs and stuff to qterm
-[ ] - find old file that had most advanced unification tactic
-[ ] - port to this version
-*)
-
-(*
-Ltac compute_subst' location :=
-  match location with
-  | "goal"%string => repeat (try rewrite subst_app ;
-                          try (rewrite subst_lam ; simpl) ;
-                          try (rewrite subst_var ; simpl;
-                               repeat (rewrite lift_lam, lift_app, lift_var)))
-  | _ => repeat (try rewrite subst_app ;
-                          try (rewrite subst_lam in location ; simpl in location) ;
-                          try (rewrite subst_var in location; simpl in location;
-                                  repeat (rewrite lift_lam, lift_app, lift_var in location)))
-  end.
-
-
-Ltac handle_case t1 t2 location :=
-  match t1 t2 with
-  | (lam ?s ?t1) (lam ?s ?t2) => apply lamInj in location
-  end.
- *)
 
 Theorem proveEqualityInParts (A B : Type) (f1 f2 : A -> B) (a1 a2 : A)
   : f1 = f2 -> a1 = a2 -> f1 a1 = f2 a2.
@@ -181,8 +179,7 @@ Ltac lambda_solve_step :=
       | H : lam ?s ?t1 = lam ?s ?t2 |- _ => apply lamInj in H
       | |- lam ?s ?t1 = lam ?s ?t2 => apply (f_equal (lam s))
       | H : lam ?s1 ?t1 = lam ?s2 ?t2 |- _ => rewrite (@alpha s1 s2 t1) in H; compute_subst_in H
-      | |- lam ?s1 ?t1 = lam ?s2 ?t2 => rewrite (@alpha s1 s2 t1);
-                                        hide_evars_in_goal; compute_subst; unhide_evars_in_goal
+      | |- lam ?s1 ?t1 = lam ?s2 ?t2 => rewrite (@alpha s1 s2 t1); compute_subst
       | H : var ?s1 0 = var ?s2 0 |- _ => apply varInj in H
       | H : const ?t1 = const ?t2 |- _ => apply constInj in H
       | H : @eq string ?s ?s |- _ => clear H
@@ -206,15 +203,11 @@ Ltac lambda_solve_step :=
                    rewrite beta in H ; compute_subst_in H
                  | rewrite betapi1 in H ; compute_subst_in H
                  | rewrite betapi2 in H ; compute_subst_in H
-                 ]
-      | |- _ =>
-          hide_evars_in_goal;
-          first [
-              rewrite beta ; compute_subst
-            | rewrite betapi1 ; compute_subst
-            | rewrite betapi2 ; compute_subst
-            ];
-          unhide_evars_in_goal
+                       ]
+      (* These need to work like this instead of just rewrites to prevent specializing evars *)
+      | |- context [app (lam ?s ?t1) ?t2] => rewrite (@beta s t1 t2); compute_subst
+      | |- context [pi1 (pair ?t1 ?t2)] => rewrite (@betapi1 t1 t2); compute_subst
+      | |- context [pi2 (pair ?t1 ?t2)] => rewrite (@betapi2 t1 t2); compute_subst
       end
     )
 .
@@ -839,49 +832,3 @@ and then finishes the theorem with Qed so that the proof term is not remembered?
 That way it would not have such long equality proof terms in things.
 Does this still sneak the term in there somewhere?
 *)
-
-
-(* Testing hide_evars_in_goal *)
-
-Theorem test_hide_evars (t : QTerm) :
-  <`t A> = <B>.
-Proof.
-  evar (et : QTerm).
-  assert (t = et) by give_up.
-  rewrite H.
-  unfold et.
-  hide_evars_in_goal.
-  Fail rewrite beta.
-Abort.
-(* So it works in this situation. But what if the evar resulted from another goal rather
-than being user defined? *)
-
-Definition evar_maker2 {t : QTerm}
-           (H : <`t A> = <(fun x => x) B>)
-  : True := I.
-
-Theorem test_hide_evars_2 : True.
-Proof.
-  refine (evar_maker2 _).
-  Print hide_evars_in_goal.
-  (* This is a possible solution. Would be very annoying though to redo
-    all the rewrites like this. *)
-  repeat match goal with
-  | |-  context [ app (lam ?x ?body) ?t2 ] => rewrite (@beta x body t2)
-  end.
-  hide_evars_in_goal.
-  Fail Fail rewrite beta.
-  (* It doesn't work!!!! I'm not sure how to fix this.*)
-Abort.
-
-Theorem equality : 1 + 1 = 2. Proof. reflexivity. Qed.
-
-Definition evar_maker (n : nat) (H : 1 + n = 2) : True := I.
-Theorem testRewrite' : True.
-Proof.
-  refine (evar_maker _ _).
-  (* Here the goal is "1 + ?Goal = 2"
-     the rewrite specializes ?Goal to 1*)
-  (*pose (H := ?Goal).*)
-  Fail Fail rewrite equality.
-Abort.

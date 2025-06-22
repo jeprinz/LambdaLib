@@ -142,9 +142,39 @@ intros lvl2 T2 t2 x.
 remember <`S.cons `ctx1 `lvl `T> as ctx in x.
 generalize dependent Heqctx.
 refine (match x with
-        | @zero _ _ n => fun _ => _ (*(@zero ctx1 <`S.subTerm `sub `T> n)*)
+        | @zero _ _ n => fun _ => castVar zero (*(@zero ctx1 <`S.subTerm `sub `T> n)*)
         | succ x' => hole (*castVar (succ (ren _ _ _ _))*)
         end); intros(*; solve_all*).
+S.unfold_all.
+
+(try match goal with
+     | |- context [app (lam ?s ?t1) ?t2] => rewrite (@beta s t1 t2)
+     | |- context [pi1 (pair ?t1 ?t2)] => rewrite (@betapi1 t1 t2)
+     | |- context [pi2 (pair ?t1 ?t2)] => rewrite (@betapi2 t1 t2)
+     end;
+ compute_subst).
+(try match goal with
+     | |- context [app (lam ?s ?t1) ?t2] => rewrite (@beta s t1 t2)
+     | |- context [pi1 (pair ?t1 ?t2)] => rewrite (@betapi1 t1 t2)
+     | |- context [pi2 (pair ?t1 ?t2)] => rewrite (@betapi2 t1 t2)
+     end).
+repeat (
+    try match goal with
+        | |- context [subst ?s ?i ?t3 (app ?t1 ?t2)] => rewrite (@subst_app s i t1 t2 t3)
+        | |- context [subst ?s ?i ?t (pair ?t1 ?t2)] => rewrite (@subst_pair s i t t1 t2)
+        | |- context [subst ?s ?i ?t1 (pi1 ?t2)] => rewrite (@subst_pi1 s i t1 t2)
+        | |- context [subst ?s ?i ?t1 (pi2 ?t2)] => rewrite (@subst_pi2 s i t1 t2)
+        | |- context [subst ?s2 ?i ?t2 (lam ?s1 ?t1)] =>
+            rewrite (@subst_lam s1 s2 i t1 t2); simpl; compute_lifts
+        | |- context [subst ?s1 ?k ?toSub (var ?s2 ?i)] =>
+            rewrite (@subst_var s1 s2 k i toSub); simpl
+        end;
+    compute_lifts).
+fix_subst_lifts.
+
+normalize.
+
+
 refine (castVar zero).
 S.unfold_all.
 Print normalize.
