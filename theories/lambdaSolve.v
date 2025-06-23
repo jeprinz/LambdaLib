@@ -60,7 +60,10 @@ Proof.
   apply lift_lift.
 Qed.
 
-Check subst_lift.
+Ltac rewrite_SP :=
+  match goal with
+  | |- context [pair (pi1 ?t, pi2 ?t)] => rewrite (@SP t)
+  end.
 Ltac rewrite_subst_lift :=
   match goal with
   | |- context [subst ?s ?i ?t1 (lift ?s ?i ?t2)] => rewrite (@subst_lift s i t1 t2)
@@ -598,28 +601,23 @@ Ltac simple_pattern_case :=
       let unweaken := fresh "unweaken" in
       let t1' := open_constr:((_:QTerm)) in
       assert (UnWeaken t1 s i t1') as unweaken; [
-        solve [repeat (constructor; try easy)]
+          solve [repeat (constructor; try easy)]
         |
           try rewrite <- (UnWeaken_prop unweaken) in *;
           clear unweaken
         ];
       simpl in H;
       apply pattern_direction1 in H
-  (*
-  | H : qterm.app ?t1 (pair ?l ?r) = ?t2 |- _ =>
-      let t' := fresh "t'" in
-      let F := fresh "F" in
-      pose (t' := <fun x => fun y => `t1 [x] [y] (x, y)>);
-      assert (t1 = <fun p => `t' [p] (proj1 p) (proj2 p)>); [
-          subst t';
-          normalize;
-          rewrite <- SP;
-          rewrite <- eta;
-          reflexivity
-        |
-          
-        ]
-   *)
+  | |- qterm.app ?t1 (var ?s ?i) = ?t2 =>
+      let unweaken := fresh "unweaken" in
+      let t1' := open_constr:((_:QTerm)) in
+      assert (UnWeaken t1 s i t1') as unweaken; [
+          solve [repeat (constructor; try easy)]
+        | try rewrite <- (UnWeaken_prop unweaken) in *;
+          clear unweaken
+        ];
+      simpl;
+      apply pattern_direction2
   end.
 
 Theorem pattern_case_first_test
@@ -649,6 +647,38 @@ Theorem pattern_case
 Proof.
   simple_pattern_case.
   assumption.
+Qed.
+
+(* We also need to be able to solve these pattern cases in the goal, in case there
+   are evars to be solved for in the goal itself. *)
+Definition make_evar_for_test_1 (t : QTerm) (H : <`t [x] x> = <C3>) : True := I.
+
+Theorem pattern_case_goal : True.
+  refine (make_evar_for_test_1 _ _).
+  (* We now have a goal with a ?Goal evar, this should be solveable with the automation *)
+  simple_pattern_case.
+  reflexivity.
+Qed.
+
+Theorem test_lift_thing
+  : lift "x" 1 (var "x" 0) = var "x" 0.
+Proof.
+  compute_lifts.
+  reflexivity.
+Qed.
+
+(* This wouldn't work if there weren't a weakening on t2, but only because I haven't implemented
+full substitution algebra - it could work.
+also TODO: fix notations to make parens correct *)
+Theorem pattern_case_reverse
+        (t1 t2 : QTerm)
+        (H : t1 = <fun x => y x {var "x" 1} {var "x" 2} (`t2[x])>)
+        : <`t1 [x] x> = <y x {var "x" 1} {var "x" 2} (`t2[x])>.
+Proof.
+  lambda_solve.
+  compute_lifts.
+  normalize.
+  reflexivity.
 Qed.
 
 Theorem pattern_case_2
@@ -693,7 +723,12 @@ If FindSubTo t1 t2 sub, then sub t1 = t2.
 Check subst.
 Inductive FindSubTo : QTerm -> QTerm -> (QTerm -> QTerm) -> Prop :=
 | fst_var : forall i s out, FindSubTo (var s i) out (subst s i out)
-(* It should be possible to handle fst and snd cases if I need to *)
+| fst_fst : forall t out sub,
+    FindSubTo t <`out, DUMMY> sub
+    -> FindSubTo (pi1 t) out sub
+| fst_snd : forall t out sub,
+    FindSubTo t <DUMMY, `out> sub
+    -> FindSubTo (pi2 t) out sub
 | fst_pair : forall t1 t2 out sub1 sub2,
     FindSubTo t1 <proj1 `out> sub1
     -> FindSubTo (sub1 t2) <proj2 `out> sub2
@@ -701,9 +736,28 @@ Inductive FindSubTo : QTerm -> QTerm -> (QTerm -> QTerm) -> Prop :=
     -> FindSubTo (pair t1 t2) out (fun t => sub2 (sub1 t))
 .
 
+Ltac pair_pattern_case_helper H :=
+  match type of H with
+  | ?t1 ?t2 = ?t3 =>
+      let temp := fresh "temp" in
+      let sub := open_constr:((_:QTerm -> QTerm)) in
+      apply (f_equal (fun t => <`t [p]>)) in H;
+      compute_subst_in H;
+      assert (FindSubTo t2 <p> sub) as temp; [
+          repeat (compute_subst; constructor)
+        |
+          apply (f_equal (fun t => sub t)) in H;
+          compute_subst_in H;
+          repeat rewrite <- SP in H;
+          clear temp
+        ]
+  end.
 Ltac pair_pattern_case :=
   match goal with
-  | H : ?t1 (pair ?l ?r) = ?t3 |- _ =>
+  | H : ?t1 (pair ?l ?r) = ?t3 |- _ => pair_pattern_case_helper H
+  | H : ?t1 (pi1 ?t2) = ?t3 |- _ => pair_pattern_case_helper H
+  | H : ?t1 (pi2 ?t2) = ?t3 |- _ => pair_pattern_case_helper H
+  end. (*
       let temp := fresh "temp" in
       let sub := open_constr:((_:QTerm -> QTerm)) in
       apply (f_equal (fun t => <`t [p]>)) in H;
@@ -716,7 +770,7 @@ Ltac pair_pattern_case :=
           repeat rewrite <- SP in H;
           clear temp
         ]
-  end.
+  end.*)
 
 (*
 The above pair_pattern_case tactic kind of works.
@@ -726,6 +780,8 @@ t1 = \p. t2 [x / fst p] [y / snd p]
 The issue is that the automation in lambda_solve isn't really designed for substituions to be more than
 ephemeral; they are supposed to be gone after compute_substs.
 The problem shows up in pattern_case_pair_2, where the substitutions can't be dealt with.
+LATER: is it maybe the case that wherever this case would be needed, there are always lifts on the
+r.h.s that make it work fine?
 
 Instead, I'm going to try, given:
 t1 ... (a, b) = t2,
@@ -769,17 +825,61 @@ Proof.
   pair_pattern_case.
   Time simple_pattern_case.
   assumption.
-Qed.  
+Qed.
+
+Theorem pair_case_same_string
+        (t1 t2 : QTerm)
+        (H : <`t1 [x] [x @1] (x, {var "x" 1})> = t2)
+  : t1 = <fun p => `t2 [p] [x / proj1 p] [x / proj2 p]>.
+Proof.
+  pair_pattern_case.
+  simple_pattern_case.
+  assumption.
+Qed.
+
+Theorem pattern_case_fst
+        (t : QTerm)
+        (H : <`t [x] (proj1 x)> = <Const>)
+  : t = <fun x => Const>.
+Proof.
+  pair_pattern_case.
+  normalize_in H.
+  simple_pattern_case.
+  lambda_solve.
+Qed.
+
+(* We also need to be able to solve these pair cases in the goal, in case there
+   are evars to be solved for in the goal itself. *)
+Definition make_evar_for_test_2 (t : QTerm) (H : <`t [x] [y] CONST (x, y)> = <C3>) : True := I.
+
+Theorem pair_case_goal : True.
+  refine (make_evar_for_test_2 _ _).
+  (* We now have a goal with a ?Goal evar, this should be solveable with the automation *)
+  match goal with
+  | |- app ?t1 (pair (var "x" 0) (var "y" 0)) = ?t3 =>
+      assert (<`t1 [p] p> = <`t3 [p] [x @1] [x / proj1 p] [y @1] [y / proj2 p]>)
+  end.
+  2: {
+    apply (f_equal (fun t => <`t [p/(x, y)]>)) in H.
+    compute_subst_in H.
+    (* compute_lifts is being messed up by evar. But this is a special case where I only need
+     to prove this once manually anyway for the tactic, so not an issue here. *)
+    
+    (*TODO HERE*)
+  Fail Fail pair_pattern_case.
+  Fail reflexivity.
+Abort.
 
 Theorem pattern_case_pair_2
         (t1 t2 : QTerm)
         (H : <`t1 [x] [y] [z] [w] (x, y) (z, w)> = t2)
   : <`t1> = <fun p1 => fun p2 => `t2 [p1] [p2] [x/ proj1 p1] [y / proj2 p1] [z / proj1 p2] [z / proj2 p2]>.
 Proof.
-  pair_pattern_case.
+  Time pair_pattern_case.
   simple_pattern_case.
   pair_pattern_case.
   simple_pattern_case.
+  Unset Printing Notations.
   compute_subst_in H.
   subst.
   lambda_solve.

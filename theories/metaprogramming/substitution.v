@@ -143,94 +143,28 @@ remember <`S.cons `ctx1 `lvl `T> as ctx in x.
 generalize dependent Heqctx.
 refine (match x with
         | @zero _ _ n => fun _ => castVar zero (*(@zero ctx1 <`S.subTerm `sub `T> n)*)
-        | succ x' => hole (*castVar (succ (ren _ _ _ _))*)
-        end); intros(*; solve_all*).
-S.unfold_all.
+        | succ x' => _ (*fun _ => castVar (succ (ren _ _ _ (castVar x')))*)
+        end); intros; solve_all.
+refine (castVar (succ _)); solve_all.
 
-(try match goal with
-     | |- context [app (lam ?s ?t1) ?t2] => rewrite (@beta s t1 t2)
-     | |- context [pi1 (pair ?t1 ?t2)] => rewrite (@betapi1 t1 t2)
-     | |- context [pi2 (pair ?t1 ?t2)] => rewrite (@betapi2 t1 t2)
-     end;
- compute_subst).
-(try match goal with
-     | |- context [app (lam ?s ?t1) ?t2] => rewrite (@beta s t1 t2)
-     | |- context [pi1 (pair ?t1 ?t2)] => rewrite (@betapi1 t1 t2)
-     | |- context [pi2 (pair ?t1 ?t2)] => rewrite (@betapi2 t1 t2)
-     end).
-repeat (
-    try match goal with
-        | |- context [subst ?s ?i ?t3 (app ?t1 ?t2)] => rewrite (@subst_app s i t1 t2 t3)
-        | |- context [subst ?s ?i ?t (pair ?t1 ?t2)] => rewrite (@subst_pair s i t t1 t2)
-        | |- context [subst ?s ?i ?t1 (pi1 ?t2)] => rewrite (@subst_pi1 s i t1 t2)
-        | |- context [subst ?s ?i ?t1 (pi2 ?t2)] => rewrite (@subst_pi2 s i t1 t2)
-        | |- context [subst ?s2 ?i ?t2 (lam ?s1 ?t1)] =>
-            rewrite (@subst_lam s1 s2 i t1 t2); simpl; compute_lifts
-        | |- context [subst ?s1 ?k ?toSub (var ?s2 ?i)] =>
-            rewrite (@subst_var s1 s2 k i toSub); simpl
-        end;
-    compute_lifts).
-fix_subst_lifts.
 
+Set Nested Proofs Allowed.
+Theorem liftBack : forall t1 t2 s i, lift s i t1 = lift s i t2 -> t1 = t2.
+Proof.
+  intros.
+  apply (f_equal (subst s i <dummy>)) in H.
+  repeat rewrite subst_lift in H.
+  assumption.
+Qed.
+
+apply (@liftBack _ _ "x" 0).
+apply (@liftBack _ _ "y" 0).
 normalize.
 
 
-refine (castVar zero).
-S.unfold_all.
-Print normalize.
-
-Print hide_evars_in_goal.
-Fail match goal with
-| |- context [ ?v : QTerm ] => idtac v; is_evar v; (let H := fresh v in
-                                                    pose (H := v); fold H)
-end.
-
-pose (H := ?Goal3).
-repeat (rewrite ?beta, ?betapi1, ?betapi2; compute_subst).
-unhide_evars_in_goal.
-
-Check ren.
-Compute (Ren sub ctx1 ctx2).
-Check (succ (ren _ _ _ x')).
+pose (part := ren _ _ _ x').
+Check (succ part).
+Focus 2.
 rewrite <- SP.
-
-(*
-I can potentially fix solve_all to work around metavariables in the goal.
-But, also I can prevent there from being metavariables in the first place by giving arguments
-to "zero".
-*)
-
-
-(* normalize nonterminates here. Why? *)
-
-Print solve_all.
 S.unfold_all.
-Set Printing Goal Names.
-Unshelve.
-
-(*
-It appears that in practice, the evars only show up in the goal, not the context.
-*)
-
-repeat rewrite beta.
-rewrite subst_lam.
-simpl.
-(* TODO: right here is the point where I need to figure out what is going on
-with existential variables. Try running the next two tactics. *)
-
-
-rewrite lift_lam.
-simpl.
-
-repeat
-   (try (rewrite lift_lam; simpl); try rewrite lift_app; try rewrite lift_pair; try rewrite lift_pi1;
-     try rewrite lift_pi2; try (rewrite lift_var; simpl)).
-
-
-(*
-1) when you run solve when there are term metavariables, it nonterminates because it just keeps
-   refining the metavaraibles with every rewrite.
-2) But why even are there term metavariables? The idea of cast is that it should be specifically
-   the equality proofs that are left for later. Everything else should be defined in the refine.
-   So what is causing these terms to be left unspecified?
-*)
+normalize.

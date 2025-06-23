@@ -452,13 +452,16 @@ Notation "'fun2' x1 x2 => y" := (lam (ident_to_string x1) (lam (ident_to_string 
 (* subst and lift notations *)
 Notation "t1 [ s @ i / t2 ]" := (subst s i t2 t1) (in custom term_term at level 40,
                                                       t1 custom term_term,
-                                                      i custom term_term,
+                                                      i at level 85,
                                                       t2 custom term_term,
                                                       s custom term_name) : term_scope.
 Notation "t1 [ s / t2 ]" := (subst s 0 t2 t1) (in custom term_term at level 40,
                                                   t1 custom term_term,
                                                   t2 custom term_term,
                                                   s custom term_name) : term_scope.
+Notation "t1 [ s @1 ]" := (lift s 1 t1) (in custom term_term at level 40,
+                                             t1 custom term_term,
+                                             s custom term_name) : term_scope.
 Notation "t1 [ s ]" := (lift s 0 t1) (in custom term_term at level 40,
                                        t1 custom term_term,
                                        s custom term_name) : term_scope.
@@ -487,6 +490,7 @@ Notation "'fun' x => t" := (lam x t) (at level 200, right associativity,  only p
 Even though none of the other notations (all defined above in the same way) work for printing.
 But in other files, it doesn't work, so I need these.*)
 Notation "t [ s ]" := (lift s 0 t) (at level 300, only printing).
+Notation "t [ s @1]" := (lift s 1 t) (at level 300, only printing).
 Notation "t1 [ s / t2 ]" := (subst s 0 t2 t1) (at level 300, only printing).
 Notation "( t1 , t2 )" := (pair t1 t2) (at level 30, only printing).
 Check pi1.

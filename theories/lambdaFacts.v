@@ -23,6 +23,26 @@ Inductive PseudoNeutral : QTerm -> Prop :=
 | neu_const : forall {T} {s : T}, PseudoNeutral (const s)
 | neu_app : forall {t1 t2}, PseudoNeutral t1 -> PseudoNeutral (app t1 t2).
 
+(*TODO: Put this in qterm/term with the rest of the stuff *)
+Axiom subst_lift' : forall s1 s2 i1 i2 t t',
+    subst s1 i1 t' (lift s2 i2 t) =
+      (if eqb s1 s2
+       then if Nat.eqb i1 i2 then t else
+              if Nat.ltb i2 i1
+              then lift s2 i2 (subst s1 (pred i1) t' t)
+              else lift s2 (S i2) (subst s1 i1 t' t)
+       else lift s2 i2 (subst s1 i1 t' t)).
+
+(*
+Axiom subst_subst : forall s1 s2 i1 i2 t1 t2 t,
+    subst s1 i1 t1 (subst s2 i2 t2 t) =
+      if eqb s1 s2
+      then if Nat.ltb i2 i1
+           then _
+           else _
+      else subst s2 i2 (subst s1 i1 t1 t2) (subst s1 i1 t1 t).
+*)
+
 Lemma subst_lift_cancel : forall t s i, subst s i (var s i) (lift s (S i) t) = t.
 Proof.
   (* This seems true? Do I need to add it to qterm? *)
