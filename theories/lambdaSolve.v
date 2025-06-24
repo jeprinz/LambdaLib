@@ -31,7 +31,33 @@ except during intermediate states.
    - I also need to consider the situation where something was marked, but is no longer an
    evar because the evar got specialized. So maybe I should periodically rewrite away Marks
    whose body is not an evar?
-*)
+   - Also, how do I stop it from just repeatedly wrapping Mark around the same evar
+   in an infinite loop?
+
+   TODO:
+   [ ] - put hide_evars_in_goal, unhide_evars_in_goal around each relevant tactic
+   [ ] - revert the matches around the rewrite idea that wasn't good enough
+ *)
+
+(* https://proofassistants.stackexchange.com/questions/5112/in-rocq-how-to-prevent-rewrite-from-specializing-existential-variables 
+Current issue: TODO:
+hide_evars works for all evars, not just QTerm.
+This creates a problem for 2 reasons:
+1) performance
+2) unhide_evars isn't an inverse, which creates problems. 
+ *)
+Ltac hide_evars :=
+  repeat match goal with
+         | H : context [ ?v ] |- _ =>
+             is_evar v; let H' := fresh "evar_temp" in pose (H' := v); fold H' in H
+         | [ |- context [ ?v (*: QTerm*) ] ] =>
+             is_evar v; let H := fresh "evar_temp" in pose (H := v); fold H
+         end.
+
+Ltac unhide_evars :=
+  repeat match goal with
+         | x := ?t (*: QTerm*) |- _ => is_evar t; subst x
+         end.
 
 Ltac rewriteBeta :=
   match goal with
@@ -155,6 +181,8 @@ Ltac compute_lifts :=
 
 Check subst_var.
 Ltac compute_subst :=
+  (*hide_evars;
+  unhide_evars;*)
   repeat (
       try match goal with
       | |- context [subst ?s ?i ?t3 (app ?t1 ?t2)] => rewrite (@subst_app s i t1 t2 t3)
@@ -819,47 +847,7 @@ Ltac pair_pattern_case_helper H :=
           clear temp
         ]
   end.
-Ltac pair_pattern_case :=
-  match goal with
-  | H : ?t1 (pair ?l ?r) = ?t3 |- _ => pair_pattern_case_helper H
-  | H : ?t1 (pi1 ?t2) = ?t3 |- _ => pair_pattern_case_helper H
-  | H : ?t1 (pi2 ?t2) = ?t3 |- _ => pair_pattern_case_helper H
-  end.
 
-Inductive GetMVAndArgs : QTerm -> QTerm -> list (QTerm + (string * nat)) -> Prop :=
-
-.
-
-Theorem pattern_case_pair
-        (t1 t2 : QTerm)
-        (H : <`t1 [x] [y] (x, y)> = t2)
-  : <`t1> = <fun p => `t2 [p] [x/ proj1 p] [y / proj2 p]>.
-Proof.
-  pair_pattern_case.
-  Time simple_pattern_case.
-  assumption.
-Qed.
-
-Theorem pair_case_same_string
-        (t1 t2 : QTerm)
-        (H : <`t1 [x] [x @1] (x, {var "x" 1})> = t2)
-  : t1 = <fun p => `t2 [p] [x / proj1 p] [x / proj2 p]>.
-Proof.
-  pair_pattern_case.
-  simple_pattern_case.
-  assumption.
-Qed.
-
-Theorem pattern_case_fst
-        (t : QTerm)
-        (H : <`t [x] (proj1 x)> = <Const>)
-  : t = <fun x => Const>.
-Proof.
-  pair_pattern_case.
-  normalize_in H.
-  simple_pattern_case.
-  lambda_solve.
-Qed.
 
 (* In order to make comparing things up to normal form work, this sorts the lifts into a standard order,
  where the lifts are non-decreasing from inside to outside *)
@@ -884,6 +872,8 @@ Ltac sort_lifts :=
              rewrite (@swap_disordered_lift s1 s2 i1 i2 t) in H
              ; [simpl in H | solve [reflexivity]]
          end.
+
+
 
 Ltac pair_pattern_case_goal_helper :=
   (*match goal with
@@ -927,10 +917,58 @@ Ltac pair_pattern_case_goal_helper :=
           compute_subst_in newGoal;
           apply (f_equal (fun t => <{ren t} [p / `t2]>)) in newGoal;
           normalize_in newGoal;
+          hide_evars;
           sort_lifts;
+          unhide_evars;
           assumption
         ]
   end.
+
+Ltac pair_pattern_case :=
+  match goal with
+  | H : ?t1 (pair ?l ?r) = ?t3 |- _ => pair_pattern_case_helper H
+  | H : ?t1 (pi1 ?t2) = ?t3 |- _ => pair_pattern_case_helper H
+  | H : ?t1 (pi2 ?t2) = ?t3 |- _ => pair_pattern_case_helper H
+  | |- ?t1 (pair ?l ?r) = ?t2 => pair_pattern_case_goal_helper
+  | |- ?t1 (pi1 ?t2) = ?t3 => pair_pattern_case_goal_helper
+  | |- ?t1 (pi2 ?t2) = ?t3 => pair_pattern_case_goal_helper
+  end.
+
+Inductive GetMVAndArgs : QTerm -> QTerm -> list (QTerm + (string * nat)) -> Prop :=
+
+.
+
+Theorem pattern_case_pair
+        (t1 t2 : QTerm)
+        (H : <`t1 [x] [y] (x, y)> = t2)
+  : <`t1> = <fun p => `t2 [p] [x/ proj1 p] [y / proj2 p]>.
+Proof.
+  pair_pattern_case.
+  Time simple_pattern_case.
+  assumption.
+Qed.
+
+Theorem pair_case_same_string
+        (t1 t2 : QTerm)
+        (H : <`t1 [x] [x @1] (x, {var "x" 1})> = t2)
+  : t1 = <fun p => `t2 [p] [x / proj1 p] [x / proj2 p]>.
+Proof.
+  pair_pattern_case.
+  simple_pattern_case.
+  assumption.
+Qed.
+
+Theorem pattern_case_fst
+        (t : QTerm)
+        (H : <`t [x] (proj1 x)> = <Const>)
+  : t = <fun x => Const>.
+Proof.
+  pair_pattern_case.
+  normalize_in H.
+  simple_pattern_case.
+  lambda_solve.
+Qed.
+
 
 (* We also need to be able to solve these pair cases in the goal, in case there
    are evars to be solved for in the goal itself. *)
@@ -938,9 +976,10 @@ Definition make_evar_for_test_2 (t : QTerm) (H : <`t [x] [y] (x, y)> = <C3>) : T
 
 Theorem pair_case_goal : True.
   refine (make_evar_for_test_2 _ _).
-  pair_pattern_case_goal_helper.
-(* TODO here *)  
-Abort.
+  pair_pattern_case.
+  simple_pattern_case.
+  reflexivity.
+Qed.
 
 
 Theorem test_lift_ordering
@@ -950,14 +989,16 @@ Proof.
   reflexivity.
 Qed.
 
+
+
 Definition make_evar_for_test_3 (t1 t2 : QTerm) (H : <`t1 [x] [y] (x, y)> = <C (`t2 [x] [y]) x y>)
   : True := I.
-Theorem pair_case_goal_rocqmetavar (t1 t2 : QTerm) : True.
-  refine (make_evar_for_test_3 t1 t2 _). (* TODO: replace t1 with _ to test evar stuff*)
-  (* TODO: fix evar thing for real. When I replace t1 by _, it creates an issue.*)
-  pair_pattern_case_goal_helper.
-  
-Abort.
+Theorem pair_case_goal_rocqmetavar (t2 : QTerm) : True.
+  refine (make_evar_for_test_3 _ t2 _).
+  pair_pattern_case.
+  simple_pattern_case.
+  reflexivity.
+Qed.
 
 Theorem pattern_case_pair_2
         (t1 t2 : QTerm)

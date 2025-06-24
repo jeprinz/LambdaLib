@@ -83,8 +83,8 @@ Ltac solve_no_unfold := repeat (lambda_solve ; repeat neutral_inj_case ;lambda_s
                   ; repeat fast_neutral_unequal_case). 
 
 Ltac solve_all := repeat (S.unfold_all ; lambda_solve ; (repeat neutral_inj_case ;lambda_solve)
-                          ; (repeat fast_neutral_unequal_case); (repeat simple_pattern_case();
-                          (repeat pair_pattern_case; subst); rewrite <- ?eta, <- ?SP)).
+                          ; (repeat fast_neutral_unequal_case); (repeat simple_pattern_case);
+                          (repeat pair_pattern_case; subst); rewrite <- ?eta, <- ?SP).
 
 
 Definition cast {ctx1 ctx2 lvl1 lvl2 ty1 ty2 tm1 tm2}
@@ -147,7 +147,6 @@ refine (match x with
         end); intros; solve_all.
 refine (castVar (succ _)); solve_all.
 
-Fail pair_pattern_case_goal_helper.
 
 match goal with
 | |- app ?t1 ?t2 = ?t3 =>
