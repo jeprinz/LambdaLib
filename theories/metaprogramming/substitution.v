@@ -147,6 +147,32 @@ refine (match x with
         end); intros; solve_all.
 refine (castVar (succ _)); solve_all.
 
+Fail pair_pattern_case_goal_helper.
+
+match goal with
+| |- app ?t1 ?t2 = ?t3 =>
+    let temp := fresh "temp" in
+    let newGoal := fresh "newGoal" in
+    let sub := open_constr:((_:QTerm -> QTerm)) in
+    (*apply (liftInj "p" 0);*)
+    compute_subst;
+    assert (FindSubTo t2 <p> sub) as temp; [
+        repeat (compute_subst; constructor)
+      |
+        assert (<`t1 [p] p> = (sub <`t3 [p]>)) as newGoal; [
+          compute_subst;
+          clear temp
+        |
+          apply (f_equal (fun t => <`t [p / `t2]>)) in newGoal
+          (*
+          assumption
+           *)
+        ]
+      ]
+end.
+2: {
+  compute_subst_in newGoal.
+  normalize_in newGoal.
 
 Set Nested Proofs Allowed.
 Theorem liftBack : forall t1 t2 s i, lift s i t1 = lift s i t2 -> t1 = t2.

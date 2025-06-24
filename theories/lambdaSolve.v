@@ -15,9 +15,23 @@ except during intermediate states.
 
 (* Due to an annoying issue with rewrite where it will specialize evars, I need to
    make custom tactics to rewrite each thing that I might want rewritten that can't
-   specialize evars using a match. For now, these only replace the rewrites in the goal;
-   maybe in the future I can figure out how to do it for those in the context as well,
-   although for now the issue with evars seems to happen only in the goal. *)
+   specialize evars using a match. 
+   Unfortunately, these don't always prevent it from specializing evars.
+   They do make it less likely and help in some cases, but if an expression with an evar is
+   similar enough to an expression without one, it can still mess up.
+   
+   An idea that might work: I could use the context[] match construction and the is_evar
+   tactic to find all subexpressions that are evars, and wrap them in a Mark construction
+   (actually, I should use a different one than then other Mark so it doesn't interfere).
+   Then, this will stop them from messing with rewrites, and I can remove Mark at the end.
+   For reflexivity where I want the evars to be specialized, I should make sure that it only
+   happens in the case of "Mark ?x = ...", and not if the evar is somewhere else inside a term.
+   So, I should make the reflexivity case specially match a Mark being on either
+   side of the equality.
+   - I also need to consider the situation where something was marked, but is no longer an
+   evar because the evar got specialized. So maybe I should periodically rewrite away Marks
+   whose body is not an evar?
+*)
 
 Ltac rewriteBeta :=
   match goal with
@@ -72,10 +86,22 @@ Ltac rewrite_mark_stuck :=
   match goal with
   | |- context [subst ?s1 ?i1 ?t' (lift ?s2 ?i2 ?t)] => rewrite (@mark_stuck t s1 i1 s2 i2 t')
   end.
-Check swap_marked_lift.
 Ltac rewrite_swap_marked_lift :=
   match goal with
   | |- context [Mark lift ?s1 ?i1 (lift ?s2 ?i2 ?t)] => rewrite (@swap_marked_lift s1 s2 i1 i2 t)
+  end.
+
+Ltac rewrite_subst_lift_in H :=
+  match goal with
+  | H : context [subst ?s ?i ?t1 (lift ?s ?i ?t2)] |- _ => rewrite (@subst_lift s i t1 t2) in H
+  end.
+Ltac rewrite_mark_stuck_in H :=
+  match goal with
+  | H : context [subst ?s1 ?i1 ?t' (lift ?s2 ?i2 ?t)] |- _  => rewrite (@mark_stuck t s1 i1 s2 i2 t') in H
+  end.
+Ltac rewrite_swap_marked_lift_in H :=
+  match goal with
+  | H : context [Mark lift ?s1 ?i1 (lift ?s2 ?i2 ?t)] |- _ => rewrite (@swap_marked_lift s1 s2 i1 i2 t) in H
   end.
 Ltac fix_subst_lift :=
   first [
@@ -99,10 +125,10 @@ Ltac fix_subst_lifts := repeat fix_subst_lift.
 
 Ltac fix_subst_lift_in H :=
   first [
-      rewrite subst_lift in H
+      rewrite_subst_lift_in H
     |
-      rewrite mark_stuck in H;
-      (rewrite swap_marked_lift in H; simpl in H); repeat (rewrite swap_marked_lift in H; simpl in H);
+      rewrite_mark_stuck_in H;
+      (rewrite_swap_marked_lift_in H; simpl in H); repeat (rewrite_swap_marked_lift_in H; simpl in H);
       fix_subst_lift_in H
     ];
   repeat rewrite MarkIsJustId in H.
@@ -143,14 +169,39 @@ Ltac compute_subst :=
       compute_lifts);
   fix_subst_lifts.
 
-Ltac compute_lifts_in H := repeat (try (rewrite lift_lam in H ; simpl in H) ;
+Ltac compute_lifts_in H :=
+  repeat match goal with
+         | H : context [lift ?s ?i (lam ?x ?t)] |- _ => rewrite (@lift_lam s x i t) in H; simpl in H
+         | H : context [lift ?s ?i (app ?t1 ?t2)] |- _ => rewrite (@lift_app s i t1 t2) in H
+         | H : context [lift ?s ?i (pair ?t1 ?t2)] |- _ => rewrite (@lift_pair s i t1 t2) in H
+         | H : context [lift ?s ?i (pi1 ?t)] |- _ => rewrite (@lift_pi1 s i t) in H
+         | H : context [lift ?s ?i (pi2 ?t)] |- _ => rewrite (@lift_pi2 s i t) in H
+         | H : context [lift ?s1 ?k (var ?s2 ?i)] |- _ => rewrite (@lift_var s1 s2 i k) in H; simpl in H
+         end.
+(*
+Ltac compute_lifts_in_old H := repeat (try (rewrite lift_lam in H ; simpl in H) ;
                                    try rewrite lift_app in H;
                                    try rewrite lift_pair in H;
                                    try rewrite lift_pi1 in H;
                                    try rewrite lift_pi2 in H;
-                              try (rewrite lift_var in H ; simpl in H)).
+                              try (rewrite lift_var in H ; simpl in H)).*)
 
-Ltac compute_subst_in H := repeat (try rewrite subst_app in H;
+Ltac compute_subst_in H :=
+  repeat (
+      try match goal with
+      | H : context [subst ?s ?i ?t3 (app ?t1 ?t2)] |- _ => rewrite (@subst_app s i t1 t2 t3) in H
+      | H : context [subst ?s ?i ?t (pair ?t1 ?t2)] |- _ => rewrite (@subst_pair s i t t1 t2) in H
+      | H : context [subst ?s ?i ?t1 (pi1 ?t2)] |- _ => rewrite (@subst_pi1 s i t1 t2) in H
+      | H : context [subst ?s ?i ?t1 (pi2 ?t2)] |- _ => rewrite (@subst_pi2 s i t1 t2) in H
+      | H : context [subst ?s2 ?i ?t2 (lam ?s1 ?t1)] |- _  =>
+          rewrite (@subst_lam s1 s2 i t1 t2) in H; simpl in H; compute_lifts_in H
+      | H : context [subst ?s1 ?k ?toSub (var ?s2 ?i)] |- _  =>
+          rewrite (@subst_var s1 s2 k i toSub) in H; simpl in H
+      end;
+      compute_lifts_in H);
+  fix_subst_lifts_in H.
+
+Ltac compute_subst_in_old H := repeat (try rewrite subst_app in H;
                                    try rewrite subst_pair in H;
                                    try rewrite subst_pi1 in H;
                                    try rewrite subst_pi2 in H;
@@ -719,8 +770,8 @@ Qed.
 
 (*
 If FindSubTo t1 t2 sub, then sub t1 = t2.
+e.g,  FindSubTo (x, y) out (fun t => <`t [x / proj1 `out] [y / proj2 `out]>)
 *)
-Check subst.
 Inductive FindSubTo : QTerm -> QTerm -> (QTerm -> QTerm) -> Prop :=
 | fst_var : forall i s out, FindSubTo (var s i) out (subst s i out)
 | fst_fst : forall t out sub,
@@ -734,6 +785,22 @@ Inductive FindSubTo : QTerm -> QTerm -> (QTerm -> QTerm) -> Prop :=
     -> FindSubTo (sub1 t2) <proj2 `out> sub2
     (*-> FindSubTo t2 <proj2 `out> sub2*)
     -> FindSubTo (pair t1 t2) out (fun t => sub2 (sub1 t))
+.
+(*
+e.g,  FindWeaken (x, y) (fun t => <`t [x] [y]>)
+ *)
+Inductive FindWeaken : QTerm -> (QTerm -> QTerm) -> Prop :=
+| fw_var : forall i s , FindWeaken (var s i) (lift s i)
+| fw_fst : forall t ren,
+    FindWeaken t ren
+    -> FindWeaken (pi1 t) ren
+| fw_snd : forall t ren,
+    FindWeaken t ren
+    -> FindWeaken (pi2 t) ren
+| fw_pair : forall t1 t2  ren1 ren2,
+    FindWeaken t1 ren1
+    -> FindWeaken t2 ren2
+    -> FindWeaken (pair t1 t2) (fun t => ren2 (ren1 t))
 .
 
 Ltac pair_pattern_case_helper H :=
@@ -757,62 +824,8 @@ Ltac pair_pattern_case :=
   | H : ?t1 (pair ?l ?r) = ?t3 |- _ => pair_pattern_case_helper H
   | H : ?t1 (pi1 ?t2) = ?t3 |- _ => pair_pattern_case_helper H
   | H : ?t1 (pi2 ?t2) = ?t3 |- _ => pair_pattern_case_helper H
-  end. (*
-      let temp := fresh "temp" in
-      let sub := open_constr:((_:QTerm -> QTerm)) in
-      apply (f_equal (fun t => <`t [p]>)) in H;
-      compute_subst_in H;
-      assert (FindSubTo (pair l r) <p> sub) as temp; [
-          repeat (compute_subst; constructor)
-        |
-          apply (f_equal (fun t => sub t)) in H;
-          compute_subst_in H;
-          repeat rewrite <- SP in H;
-          clear temp
-        ]
-  end.*)
+  end.
 
-(*
-The above pair_pattern_case tactic kind of works.
-However, it leaves behind substitutions. The idea is that if
-t1 (x, y) = t2, then
-t1 = \p. t2 [x / fst p] [y / snd p]
-The issue is that the automation in lambda_solve isn't really designed for substituions to be more than
-ephemeral; they are supposed to be gone after compute_substs.
-The problem shows up in pattern_case_pair_2, where the substitutions can't be dealt with.
-LATER: is it maybe the case that wherever this case would be needed, there are always lifts on the
-r.h.s that make it work fine?
-
-Instead, I'm going to try, given:
-t1 ... (a, b) = t2,
-substitute  t1 := fun ... p => t1' ... (fst p) (snd p)
-globally substitute out t1, and just work with t1' instead.
-*)
-
-(*
-Given something like (t a b c), and given evars original, new, and toSub,
-FindPairCaseSub (t a b c) original new toSub
-->
-original = t
-toSub = fun a b c p => new a b c (fst p) (snd p)
-new = fun a b c l r => original a b c (l, r)
-
-and we get as a theorem that original = toSub
-
-
-(t a b c) => find t' such that t = fun a b c p => t' a b c (fst p) (snd p)
-(t a b) =>   find t' such that t = fun a b   p => t' a b   (fst p) (snd p)
- *)
-(*
-Inductive FindPairCaseSub : QTerm -> QTerm -> QTerm -> QTerm -> Prop :=
-| fpcs_app : forall,
-    FindPairCaseSub rest original new toSub
-    -> FindPairCaseSub (app rest arg) original new <fun x => `toSub [x] x>
-.
- *)
-(*
-GetMVAndArgs (t [x] a [y] b c) t [a, x, b, y, c]
- *)
 Inductive GetMVAndArgs : QTerm -> QTerm -> list (QTerm + (string * nat)) -> Prop :=
 
 .
@@ -848,26 +861,102 @@ Proof.
   lambda_solve.
 Qed.
 
+(* In order to make comparing things up to normal form work, this sorts the lifts into a standard order,
+ where the lifts are non-decreasing from inside to outside *)
+Theorem swap_disordered_lift (s1 s2 : string) (i1 i2 : nat) (t : QTerm)
+        (H : orb (ltb s1 s2) (andb (eqb s1 s2) (PeanoNat.Nat.ltb i1 i2)) = true)
+  : lift s1 i1 (lift s2 i2 t) =
+      (if eqb s1 s2
+       then if Nat.ltb i2 i1
+            then lift s2 i2 (lift s1 (pred i1) t)
+            else lift s2 (S i2) (lift s1 i1 t)
+       else lift s2 i2 (lift s1 i1 t)).
+Proof.
+  apply lift_lift.
+Qed.
+
+Ltac sort_lifts :=
+  repeat match goal with
+         | |- context [lift ?s1 ?i1 (lift ?s2 ?i2 ?t)] =>
+             rewrite (@swap_disordered_lift s1 s2 i1 i2 t)
+             ; [simpl | solve [reflexivity]]
+         | H : context [lift ?s1 ?i1 (lift ?s2 ?i2 ?t)] |- _ =>
+             rewrite (@swap_disordered_lift s1 s2 i1 i2 t) in H
+             ; [simpl in H | solve [reflexivity]]
+         end.
+
+Ltac pair_pattern_case_goal_helper :=
+  (*match goal with
+  | |- app ?t1 ?t2 = ?t3 =>
+      let temp := fresh "temp" in
+      let newGoal := fresh "newGoal" in
+      let sub := open_constr:((_:QTerm -> QTerm)) in
+      (*apply (liftInj "p" 0);*)
+      compute_subst;
+      assert (FindSubTo t2 <p> sub) as temp; [
+          repeat (compute_subst; constructor)
+        |
+          assert (<`t1 [p] p> = (sub <`t3 [p]>)) as newGoal; [
+            compute_subst;
+            clear temp
+          |
+            apply (f_equal (fun t => <`t [p / `t2]>)) in newGoal;
+            compute_subst_in newGoal;
+            assumption
+          ]
+        ]
+  end.*)
+  match goal with
+  | |- app ?t1 ?t2 = ?t3 =>
+      let temp1 := fresh "temp1" in
+      let temp2 := fresh "temp2" in
+      let newGoal := fresh "newGoal" in
+      let sub := open_constr:((_:QTerm -> QTerm)) in
+      let ren := open_constr:((_:QTerm -> QTerm)) in
+      compute_subst;
+      assert (FindSubTo t2 <p> sub) as temp1
+          by repeat (compute_subst; constructor);
+      assert (FindWeaken t2 ren) as temp2
+          by repeat constructor;
+      assert (sub <`t1 [p] p> = sub <`t3 [p]>) as newGoal
+      ; [
+          compute_subst;
+          clear temp1;
+          clear temp2
+        |
+          compute_subst_in newGoal;
+          apply (f_equal (fun t => <{ren t} [p / `t2]>)) in newGoal;
+          normalize_in newGoal;
+          sort_lifts;
+          assumption
+        ]
+  end.
+
 (* We also need to be able to solve these pair cases in the goal, in case there
    are evars to be solved for in the goal itself. *)
-Definition make_evar_for_test_2 (t : QTerm) (H : <`t [x] [y] CONST (x, y)> = <C3>) : True := I.
+Definition make_evar_for_test_2 (t : QTerm) (H : <`t [x] [y] (x, y)> = <C3>) : True := I.
 
 Theorem pair_case_goal : True.
   refine (make_evar_for_test_2 _ _).
-  (* We now have a goal with a ?Goal evar, this should be solveable with the automation *)
-  match goal with
-  | |- app ?t1 (pair (var "x" 0) (var "y" 0)) = ?t3 =>
-      assert (<`t1 [p] p> = <`t3 [p] [x @1] [x / proj1 p] [y @1] [y / proj2 p]>)
-  end.
-  2: {
-    apply (f_equal (fun t => <`t [p/(x, y)]>)) in H.
-    compute_subst_in H.
-    (* compute_lifts is being messed up by evar. But this is a special case where I only need
-     to prove this once manually anyway for the tactic, so not an issue here. *)
-    
-    (*TODO HERE*)
-  Fail Fail pair_pattern_case.
-  Fail reflexivity.
+  pair_pattern_case_goal_helper.
+(* TODO here *)  
+Abort.
+
+
+Theorem test_lift_ordering
+  : <C [z] [a] [b @1] [b]> = <{lift "b" 2 <C [a] [b]>} [z]>.
+Proof.
+  sort_lifts.
+  reflexivity.
+Qed.
+
+Definition make_evar_for_test_3 (t1 t2 : QTerm) (H : <`t1 [x] [y] (x, y)> = <C (`t2 [x] [y]) x y>)
+  : True := I.
+Theorem pair_case_goal_rocqmetavar (t1 t2 : QTerm) : True.
+  refine (make_evar_for_test_3 t1 t2 _). (* TODO: replace t1 with _ to test evar stuff*)
+  (* TODO: fix evar thing for real. When I replace t1 by _, it creates an issue.*)
+  pair_pattern_case_goal_helper.
+  
 Abort.
 
 Theorem pattern_case_pair_2
