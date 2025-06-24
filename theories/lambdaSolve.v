@@ -181,8 +181,7 @@ Ltac compute_lifts :=
 
 Check subst_var.
 Ltac compute_subst :=
-  (*hide_evars;
-  unhide_evars;*)
+  hide_evars;
   repeat (
       try match goal with
       | |- context [subst ?s ?i ?t3 (app ?t1 ?t2)] => rewrite (@subst_app s i t1 t2 t3)
@@ -195,7 +194,8 @@ Ltac compute_subst :=
           rewrite (@subst_var s1 s2 k i toSub); simpl
       end;
       compute_lifts);
-  fix_subst_lifts.
+  fix_subst_lifts;
+  unhide_evars.
 
 Ltac compute_lifts_in H :=
   repeat match goal with
@@ -287,9 +287,12 @@ Ltac lambda_solve_step :=
                  | rewrite betapi2 in H ; compute_subst_in H
                        ]
       (* These need to work like this instead of just rewrites to prevent specializing evars *)
-      | |- context [app (lam ?s ?t1) ?t2] => rewrite (@beta s t1 t2); compute_subst
-      | |- context [pi1 (pair ?t1 ?t2)] => rewrite (@betapi1 t1 t2); compute_subst
-      | |- context [pi2 (pair ?t1 ?t2)] => rewrite (@betapi2 t1 t2); compute_subst
+      | |- context [app (lam ?s ?t1) ?t2] =>
+          hide_evars; rewrite (@beta s t1 t2); compute_subst; unhide_evars
+      | |- context [pi1 (pair ?t1 ?t2)] =>
+          hide_evars; rewrite (@betapi1 t1 t2); compute_subst; unhide_evars
+      | |- context [pi2 (pair ?t1 ?t2)] =>
+          hide_evars; rewrite (@betapi2 t1 t2); compute_subst; unhide_evars
       end
     )
 .
@@ -839,7 +842,7 @@ Ltac pair_pattern_case_helper H :=
       apply (f_equal (fun t => <`t [p]>)) in H;
       compute_subst_in H;
       assert (FindSubTo t2 <p> sub) as temp; [
-          repeat (compute_subst; constructor)
+          repeat (compute_subst; once constructor)
         |
           apply (f_equal (fun t => sub t)) in H;
           compute_subst_in H;
@@ -876,26 +879,6 @@ Ltac sort_lifts :=
 
 
 Ltac pair_pattern_case_goal_helper :=
-  (*match goal with
-  | |- app ?t1 ?t2 = ?t3 =>
-      let temp := fresh "temp" in
-      let newGoal := fresh "newGoal" in
-      let sub := open_constr:((_:QTerm -> QTerm)) in
-      (*apply (liftInj "p" 0);*)
-      compute_subst;
-      assert (FindSubTo t2 <p> sub) as temp; [
-          repeat (compute_subst; constructor)
-        |
-          assert (<`t1 [p] p> = (sub <`t3 [p]>)) as newGoal; [
-            compute_subst;
-            clear temp
-          |
-            apply (f_equal (fun t => <`t [p / `t2]>)) in newGoal;
-            compute_subst_in newGoal;
-            assumption
-          ]
-        ]
-  end.*)
   match goal with
   | |- app ?t1 ?t2 = ?t3 =>
       let temp1 := fresh "temp1" in
@@ -905,9 +888,9 @@ Ltac pair_pattern_case_goal_helper :=
       let ren := open_constr:((_:QTerm -> QTerm)) in
       compute_subst;
       assert (FindSubTo t2 <p> sub) as temp1
-          by repeat (compute_subst; constructor);
+          by repeat (compute_subst; once constructor);
       assert (FindWeaken t2 ren) as temp2
-          by repeat constructor;
+          by repeat once constructor;
       assert (sub <`t1 [p] p> = sub <`t3 [p]>) as newGoal
       ; [
           compute_subst;

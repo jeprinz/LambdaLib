@@ -57,7 +57,7 @@ Inductive Typed : (*context*) QTerm -> (*level*) nat -> (*Type*) QTerm -> (*Term
 (*
 | app : forall ctx A B s1 s2 lvl, Typed ctx lvl <`pi `A `B> s1 -> Typed ctx lvl A s2
                                  -> Typed ctx lvl <`subLast `B `s2> <`app `s1 `s2>*)
-| var : forall ctx T t lvl, Var ctx lvl T t -> Typed ctx lvl T t
+| var : forall {ctx T t lvl}, Var ctx lvl T t -> Typed ctx lvl T t
 | true : forall {ctx}, Typed ctx 0 S.Bool S.true
 | false : forall {ctx}, Typed ctx 0 S.Bool S.false
 (*
@@ -84,7 +84,11 @@ Ltac solve_no_unfold := repeat (lambda_solve ; repeat neutral_inj_case ;lambda_s
 
 Ltac solve_all := repeat (S.unfold_all ; lambda_solve ; (repeat neutral_inj_case ;lambda_solve)
                           ; (repeat fast_neutral_unequal_case); (repeat simple_pattern_case);
-                          (repeat pair_pattern_case; subst); rewrite <- ?eta, <- ?SP).
+                          (repeat pair_pattern_case; subst);
+                          hide_evars;
+                          rewrite <- ?eta, <- ?SP;
+                          sort_lifts;
+                          unhide_evars).
 
 
 Definition cast {ctx1 ctx2 lvl1 lvl2 ty1 ty2 tm1 tm2}
@@ -132,61 +136,38 @@ Definition idRen {ctx} : Ren S.idSub ctx ctx.
   refine (fun lvl T t x => castVar x); solve_all.
 Defined.
 
-Compute (1 + ltac:(exact 2)).
-
-Axiom hole : forall {T}, T.
-(*Definition idRen {ctx} : Ren S.idSub ctx ctx := fun lvl T t x => x.*)
 Definition liftRen {ctx1 ctx2 lvl T sub} (ren : Ren sub ctx1 ctx2)
   : Ren <`S.liftSub `sub> <`S.cons `ctx1 `lvl `T> <`S.cons `ctx2 `lvl (`S.subTerm `sub `T)>.
 intros lvl2 T2 t2 x.
 remember <`S.cons `ctx1 `lvl `T> as ctx in x.
 generalize dependent Heqctx.
-(* This works, I'm investigating why putting it all in one expr doesn't work *)
-
-refine (match x with
-        | zero  => fun _ => castVar zero
-        | succ x' => _ (*fun _ => castVar (succ (ren _ _ _ (castVar x')))*)
-        end); intros; solve_all.
-(*refine (castVar (succ (ren _ _ _ (castVar x')))); solve_all.*)
-refine (castVar (succ (ren _ _ _ (castVar x')))).
-3: {
-  hide_evars.
-  solve_all.
-
-
 refine (match x with
         | zero  => fun _ => castVar zero
         | succ x' => fun _ => castVar (succ (ren _ _ _ (castVar x')))
-        end).
-(* goal 7 is the one that isn't solvable by the time we get there *)
-7: {
-  solve_all.
-  hide_evars.
-  solve_all.
-  unhide_evars.
-  reflexivity.
-  (*
-    Two problems:
-    1) even though reflexivity works there, it shouldn't really because there are multiple possible
-       solutions to the evar (I think?)
-    2) why does it just work with no problems in the other case?
-       - I should check if it also has a goal that looks like this one
+        end); solve_all.
+Defined.
+(*
+So the above works. However, somewhere deep in a solve_all, it uses reflexivity to solve a goal
+like
+?x [x] (`t1 [x] x) = `t2 [x] (`t1 [x] x)
+where `t1 and `t2 are rocq "metavariables", and ?x is an evar.
+I'm not sure if this is correct, since the evar wasn't exactly "forced" to have the value `t2.
+*)
 
-   After some investigation, I think that this is being caused by a rewrite specializing an evar in
-   normalize. It is also having problem 1) even in the above part that works, however.
-   *)
+(*
+TODO:
+[ ] - implement renTerm
+[ ] - see if I can get that to actually compute despite transports getting stuck
+*)
 
-(*or, delete from 7: and run from here *)
-solve_all.
-solve_all.
-solve_all.
-solve_all.
-solve_all.
-solve_all.
-(* Here is the one that is bad *)
-solve_all.
-
-refine (castVar (succ (castVar (ren _ _ _ x')))); solve_all.
-
-
+Fixpoint renTerm {ctx1 ctx2 sub lvl T t} (ren : Ren sub ctx1 ctx2)
+           (prog : Typed ctx1 lvl T t) : Typed ctx2 lvl <`S.subTerm `sub `T> <`S.subTerm `sub `t>.
+(*dep match generalize*)
+generalize dependent ren.
+refine (match prog with
+        | lambda t => fun ren => cast (lambda (renTerm _ _ _ _ _ _ (liftRen ren) t))
+        | var x => fun ren => var (ren _ _ _ (castVar x))
+        | true => fun _ => cast true
+        | false => fun _ => cast false
+        end ); solve_all.
 Defined.
