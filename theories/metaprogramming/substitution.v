@@ -137,59 +137,56 @@ Compute (1 + ltac:(exact 2)).
 Axiom hole : forall {T}, T.
 (*Definition idRen {ctx} : Ren S.idSub ctx ctx := fun lvl T t x => x.*)
 Definition liftRen {ctx1 ctx2 lvl T sub} (ren : Ren sub ctx1 ctx2)
-  : Ren <`S.liftSub `sub> <`S.cons `ctx1 `lvl `T> <`S.cons `ctx1 `lvl (`S.subTerm `sub `T)>.
+  : Ren <`S.liftSub `sub> <`S.cons `ctx1 `lvl `T> <`S.cons `ctx2 `lvl (`S.subTerm `sub `T)>.
 intros lvl2 T2 t2 x.
 remember <`S.cons `ctx1 `lvl `T> as ctx in x.
 generalize dependent Heqctx.
+(* This works, I'm investigating why putting it all in one expr doesn't work *)
+
 refine (match x with
-        | @zero _ _ n => fun _ => castVar zero (*(@zero ctx1 <`S.subTerm `sub `T> n)*)
+        | zero  => fun _ => castVar zero
         | succ x' => _ (*fun _ => castVar (succ (ren _ _ _ (castVar x')))*)
         end); intros; solve_all.
-refine (castVar (succ _)); solve_all.
+(*refine (castVar (succ (ren _ _ _ (castVar x')))); solve_all.*)
+refine (castVar (succ (ren _ _ _ (castVar x')))).
+3: {
+  hide_evars.
+  solve_all.
 
 
-match goal with
-| |- app ?t1 ?t2 = ?t3 =>
-    let temp := fresh "temp" in
-    let newGoal := fresh "newGoal" in
-    let sub := open_constr:((_:QTerm -> QTerm)) in
-    (*apply (liftInj "p" 0);*)
-    compute_subst;
-    assert (FindSubTo t2 <p> sub) as temp; [
-        repeat (compute_subst; constructor)
-      |
-        assert (<`t1 [p] p> = (sub <`t3 [p]>)) as newGoal; [
-          compute_subst;
-          clear temp
-        |
-          apply (f_equal (fun t => <`t [p / `t2]>)) in newGoal
-          (*
-          assumption
-           *)
-        ]
-      ]
-end.
-2: {
-  compute_subst_in newGoal.
-  normalize_in newGoal.
+refine (match x with
+        | zero  => fun _ => castVar zero
+        | succ x' => fun _ => castVar (succ (ren _ _ _ (castVar x')))
+        end).
+(* goal 7 is the one that isn't solvable by the time we get there *)
+7: {
+  solve_all.
+  hide_evars.
+  solve_all.
+  unhide_evars.
+  reflexivity.
+  (*
+    Two problems:
+    1) even though reflexivity works there, it shouldn't really because there are multiple possible
+       solutions to the evar (I think?)
+    2) why does it just work with no problems in the other case?
+       - I should check if it also has a goal that looks like this one
 
-Set Nested Proofs Allowed.
-Theorem liftBack : forall t1 t2 s i, lift s i t1 = lift s i t2 -> t1 = t2.
-Proof.
-  intros.
-  apply (f_equal (subst s i <dummy>)) in H.
-  repeat rewrite subst_lift in H.
-  assumption.
-Qed.
+   After some investigation, I think that this is being caused by a rewrite specializing an evar in
+   normalize. It is also having problem 1) even in the above part that works, however.
+   *)
 
-apply (@liftBack _ _ "x" 0).
-apply (@liftBack _ _ "y" 0).
-normalize.
+(*or, delete from 7: and run from here *)
+solve_all.
+solve_all.
+solve_all.
+solve_all.
+solve_all.
+solve_all.
+(* Here is the one that is bad *)
+solve_all.
+
+refine (castVar (succ (castVar (ren _ _ _ x')))); solve_all.
 
 
-pose (part := ren _ _ _ x').
-Check (succ part).
-Focus 2.
-rewrite <- SP.
-S.unfold_all.
-normalize.
+Defined.
