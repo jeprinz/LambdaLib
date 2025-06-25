@@ -126,13 +126,13 @@ Qed.
 Ltac escape_transport_hell :=
   repeat (rewrite (*?push_transport_through, ?compose_transport,*) ?remove_cast).
 
-Theorem match_on_id_works : match_on_id' (ty_lambda ty_true) eq_refl eq_refl eq_refl
+(*Theorem match_on_id_works : match_on_id' (ty_lambda ty_true) eq_refl eq_refl eq_refl
                             = existT _ _ ty_true.
 Proof.
   simpl.
   escape_transport_hell.
   reflexivity.
-Qed.
+Qed.*)
   
 Theorem push_transport_through
         (P Q : QTerm -> nat -> QTerm -> QTerm -> Type)

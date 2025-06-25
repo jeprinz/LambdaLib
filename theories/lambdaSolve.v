@@ -1045,3 +1045,9 @@ and then finishes the theorem with Qed so that the proof term is not remembered?
 That way it would not have such long equality proof terms in things.
 Does this still sneak the term in there somewhere?
 *)
+
+(*
+TODO: the pair case and simple_pattern_case only are one sided, they need to handle the one where
+left and right sides are reversed
+(although its interesting that I didn't need that in practice yet?)
+*)

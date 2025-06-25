@@ -36,6 +36,8 @@ Module S.
   (* liftSub : Sub ctx1 ctx2 -> Sub (cons ctx1 lvl T) (cons ctx2 lvl (subTerm sub T)) *)
   Definition liftSub := <fun sub => fun env => (sub (proj1 env), proj2 env)>.
   (* subTerm : (sub : Sub ctx1 ctx2) -> Term ctx1 T -> Term ctx2 (subTerm sub T) *)
+  (* extendSub : Sub ctx1 ctx2 -> Term ctx1 T -> Sub (ctx1, T) ctx2 *)
+  Definition extendSub := <fun sub => fun t => fun env => (sub env, t (sub env))>.
   Definition subTerm := <fun sub => fun t => fun env => t (sub env)>.
 
   Ltac unfold_all := unfold nil, cons, zero, succ, pi, U, Bool, Empty, var_to_term, lambda,
@@ -146,6 +148,13 @@ refine (match x with
         | succ x' => fun _ => castVar (succ (ren _ _ _ (castVar x')))
         end); solve_all.
 Defined.
+
+Definition weaken1Ren {ctx lvl T}
+  : Ren S.weaken1Ren ctx <`S.cons `ctx `lvl `T>.
+unfold Ren.
+intros lvl' T' t' x.
+refine (castVar (succ x)); solve_all.
+Defined.
 (*
 So the above works. However, somewhere deep in a solve_all, it uses reflexivity to solve a goal
 like
@@ -156,7 +165,7 @@ I'm not sure if this is correct, since the evar wasn't exactly "forced" to have 
 
 (*
 TODO:
-[ ] - implement renTerm
+[x] - implement renTerm
 [ ] - see if I can get that to actually compute despite transports getting stuck
 *)
 
@@ -171,3 +180,251 @@ refine (match prog with
         | false => fun _ => cast false
         end ); solve_all.
 Defined.
+
+Definition run_ren_1_statement : Prop.
+  refine (renTerm (@idRen S.nil) true = cast true); solve_all.
+Defined.  
+Theorem run_ren_1 : run_ren_1_statement.
+Proof.
+  unfold run_ren_1_statement.
+  simpl.
+  Fail reflexivity.
+Abort.
+
+
+
+Theorem compose_cast
+        (ctx1 ctx2 ctx3 ty1 ty2 ty3 tm1 tm2 tm3 : QTerm)
+        (lvl1 lvl2 lvl3 : nat)
+        (pctx1 : ctx1 = ctx2) (pctx2 : ctx2 = ctx3)
+        (plvl1 : lvl1 = lvl2) (plvl2 : lvl2 = lvl3)
+        (pty1 : ty1 = ty2) (pty2 : ty2 = ty3)
+        (ptm1 : tm1 = tm2) (ptm2 : tm2 = tm3)
+        (input : Typed ctx1 lvl1 ty1 tm1)
+  : @cast _ _ _ _ _ _ _ _ pctx2 plvl2 pty2 ptm2
+          (@cast _ _ _ _ _ _ _ _ pctx1 plvl1 pty1 ptm1 input) =
+      @cast _ _ _ _ _ _ _ _
+            (eq_trans pctx1 pctx2)
+            (eq_trans plvl1 plvl2)
+            (eq_trans pty1 pty2)
+            (eq_trans ptm1 ptm2)
+            input.
+Proof.
+  subst.
+  reflexivity.
+Qed.
+Check f_equal.
+Theorem push_transport_through
+        (Pctx : QTerm -> QTerm)
+        (Plvl : nat -> nat)
+        (Pty : QTerm -> QTerm)
+        (Ptm : QTerm -> QTerm)
+        (f : forall {ctx lvl ty tm}, Typed ctx lvl ty tm
+                                   -> Typed (Pctx ctx) (Plvl lvl) (Pty ty) (Ptm tm))
+        (ctx1 ctx2 ty1 ty2 tm1 tm2 : QTerm)
+        (lvl1 lvl2 : nat)
+        (pctx : ctx1 = ctx2)
+        (plvl : lvl1 = lvl2)
+        (pty : ty1 = ty2)
+        (ptm : tm1 = tm2)
+        (input : Typed ctx1 lvl1 ty1 tm1)
+  : f (@cast _ _ _ _ _ _ _ _ pctx plvl pty ptm input) =
+      @cast _ _ _ _ _ _ _ _
+            (f_equal Pctx pctx)
+            (f_equal Plvl plvl)
+            (f_equal Pty pty)
+            (f_equal Ptm ptm)
+            (f input).
+Proof.
+  refine (match pctx, plvl, pty, ptm with
+          | eq_refl, eq_refl, eq_refl, eq_refl => _
+          end).
+  reflexivity.
+Qed.
+
+Definition run_ren_1_statement' : Prop.
+  refine (cast (renTerm (@idRen S.nil) true) = true); solve_all.
+Defined.
+Theorem run_ren_1' : run_ren_1_statement'.
+Proof.
+  unfold run_ren_1_statement'.
+  simpl.
+  rewrite compose_cast.
+  rewrite remove_cast.
+  reflexivity.
+Qed.
+
+(*
+Trying applying a renaming to a term.
+renaming = succ, starting with a context with 1 free variable
+term = \x0. x1
+should get renamed into \x0. x2
+*)
+
+(* TODO: solve_all should be able to infer the type, term, and level indices.
+ can I get rocq to allow me to leave those as evars? *)
+Definition prog1 : Typed <`S.cons `S.nil {const 0} `S.Bool> 0
+                         <`S.pi `S.Bool `S.Bool>
+                     <`S.lambda (`S.var_to_term (`S.succ `S.zero))>.
+refine (cast (lambda (var (succ zero)))); solve_all.
+Defined.
+
+Definition prog2 : Typed <`S.cons (`S.cons `S.nil {const 0} `S.Bool) {const 0} `S.Bool> 0
+                         <`S.pi `S.Bool `S.Bool>
+                     <`S.lambda (`S.var_to_term (`S.succ (`S.succ `S.zero)))>.
+refine (cast (lambda (var (succ (succ zero))))); solve_all.
+Defined.
+
+Check @weaken1Ren.
+Definition run_ren_2_statement : Prop.
+  refine (cast (renTerm weaken1Ren prog1) = prog2); solve_all.
+Defined.
+
+Axiom eq_cheat : forall {T} {x y : T}, x = y.
+Axiom replace_eq : forall T (x y : T) (p : x = y), p = eq_cheat.
+Check @eq_ind_r.
+Check @cast.
+(*Axiom replace_eq_2 : forall A x P px y , eq_ind_r A x P px*)
+Import HiddenMark.
+Check (@cast).
+Check (Mark (@cast)).
+Theorem compact_cast
+        (ctx1 ctx2 ty1 ty2 tm1 tm2 : QTerm)
+        (lvl1 lvl2 : nat)
+        (pctx : ctx1 = ctx2)
+        (plvl : lvl1 = lvl2)
+        (pty : ty1 = ty2)
+        (ptm : tm1 = tm2)
+        (input : Typed ctx1 lvl1 ty1 tm1)
+  : @cast _ _ _ _ _ _ _ _ pctx plvl pty ptm input
+    = ((Mark (@cast)) _ _ _ _ _ _ _ _ eq_cheat eq_cheat eq_cheat eq_cheat input).
+Proof.
+  rewrite (replace_eq _ _ _ pctx).
+  rewrite (replace_eq _ _ _ plvl).
+  rewrite (replace_eq _ _ _ pty).
+  rewrite (replace_eq _ _ _ ptm).
+  rewrite MarkIsJustId.
+  reflexivity.
+Qed.
+
+Theorem compact_castVar
+        (ctx1 ctx2 ty1 ty2 tm1 tm2 : QTerm)
+        (lvl1 lvl2 : nat)
+        (pctx : ctx1 = ctx2)
+        (plvl : lvl1 = lvl2)
+        (pty : ty1 = ty2)
+        (ptm : tm1 = tm2)
+        (input : Var ctx1 lvl1 ty1 tm1)
+  : @castVar _ _ _ _ _ _ _ _ pctx plvl pty ptm input
+    = ((Mark (@castVar)) _ _ _ _ _ _ _ _ eq_cheat eq_cheat eq_cheat eq_cheat input).
+Proof.
+  rewrite (replace_eq _ _ _ pctx).
+  rewrite (replace_eq _ _ _ plvl).
+  rewrite (replace_eq _ _ _ pty).
+  rewrite (replace_eq _ _ _ ptm).
+  rewrite MarkIsJustId.
+  reflexivity.
+Qed.
+        
+Ltac garbage_compact := repeat rewrite compact_cast;
+                        repeat rewrite compact_castVar;
+                        repeat rewrite MarkIsJustId.
+
+Theorem compose_castVar
+        (ctx1 ctx2 ctx3 ty1 ty2 ty3 tm1 tm2 tm3 : QTerm)
+        (lvl1 lvl2 lvl3 : nat)
+        (pctx1 : ctx1 = ctx2) (pctx2 : ctx2 = ctx3)
+        (plvl1 : lvl1 = lvl2) (plvl2 : lvl2 = lvl3)
+        (pty1 : ty1 = ty2) (pty2 : ty2 = ty3)
+        (ptm1 : tm1 = tm2) (ptm2 : tm2 = tm3)
+        (input : Var ctx1 lvl1 ty1 tm1)
+  : @castVar _ _ _ _ _ _ _ _ pctx2 plvl2 pty2 ptm2
+          (@castVar _ _ _ _ _ _ _ _ pctx1 plvl1 pty1 ptm1 input) =
+      @castVar _ _ _ _ _ _ _ _
+            (eq_trans pctx1 pctx2)
+            (eq_trans plvl1 plvl2)
+            (eq_trans pty1 pty2)
+            (eq_trans ptm1 ptm2)
+            input.
+Proof.
+  subst.
+  reflexivity.
+Qed.
+
+Theorem push_transport_through_var
+        (Pctx : QTerm -> QTerm)
+        (Plvl : nat -> nat)
+        (Pty : QTerm -> QTerm)
+        (Ptm : QTerm -> QTerm)
+        (f : forall {ctx lvl ty tm}, Var ctx lvl ty tm
+                                   -> Var (Pctx ctx) (Plvl lvl) (Pty ty) (Ptm tm))
+        (ctx1 ctx2 ty1 ty2 tm1 tm2 : QTerm)
+        (lvl1 lvl2 : nat)
+        (pctx : ctx1 = ctx2)
+        (plvl : lvl1 = lvl2)
+        (pty : ty1 = ty2)
+        (ptm : tm1 = tm2)
+        (input : Var ctx1 lvl1 ty1 tm1)
+  : f (@castVar _ _ _ _ _ _ _ _ pctx plvl pty ptm input) =
+      @castVar _ _ _ _ _ _ _ _
+            (f_equal Pctx pctx)
+            (f_equal Plvl plvl)
+            (f_equal Pty pty)
+            (f_equal Ptm ptm)
+            (f input).
+Proof.
+  refine (match pctx, plvl, pty, ptm with
+          | eq_refl, eq_refl, eq_refl, eq_refl => _
+          end).
+  reflexivity.
+Qed.
+
+Theorem push_transport_through_var_term
+        (Pctx : QTerm -> QTerm)
+        (Plvl : nat -> nat)
+        (Pty : QTerm -> QTerm)
+        (Ptm : QTerm -> QTerm)
+        (f : forall {ctx lvl ty tm}, Var ctx lvl ty tm
+                                   -> Typed (Pctx ctx) (Plvl lvl) (Pty ty) (Ptm tm))
+        (ctx1 ctx2 ty1 ty2 tm1 tm2 : QTerm)
+        (lvl1 lvl2 : nat)
+        (pctx : ctx1 = ctx2)
+        (plvl : lvl1 = lvl2)
+        (pty : ty1 = ty2)
+        (ptm : tm1 = tm2)
+        (input : Var ctx1 lvl1 ty1 tm1)
+  : f (@castVar _ _ _ _ _ _ _ _ pctx plvl pty ptm input) =
+      @cast _ _ _ _ _ _ _ _
+            (f_equal Pctx pctx)
+            (f_equal Plvl plvl)
+            (f_equal Pty pty)
+            (f_equal Ptm ptm)
+            (f input).
+Proof.
+  refine (match pctx, plvl, pty, ptm with
+          | eq_refl, eq_refl, eq_refl, eq_refl => _
+          end).
+  reflexivity.
+Qed.
+
+Theorem run_ren_2 : run_ren_2_statement.
+Proof.
+  unfold run_ren_2_statement, prog1, prog2.
+  Check (@renTerm).
+  Check (fun ctx lvl ty tm => @renTerm ctx _ _ lvl ty tm weaken1Ren).
+  garbage_compact.
+  Check @push_transport_through.
+  Check renTerm.
+  Time rewrite (@push_transport_through _ _ _ _
+                                        (fun ctx lvl ty tm => @renTerm ctx _ _ lvl ty tm weaken1Ren)).
+  simpl.
+  garbage_compact.
+  repeat rewrite compose_cast.
+  unfold weaken1Ren.
+  garbage_compact.
+  Check @succ.
+  repeat rewrite (@push_transport_through_var _ _ _ _
+                                              (fun ctx lvl ty tm => @succ ctx ty _ tm lvl _)).
+  repeat rewrite compose_castVar.
+  rewrite (@push_transport_through_var_term _ _ _ _
+                                            (fun ctx lvl ty tm => @var ctx ty tm lvl)).
