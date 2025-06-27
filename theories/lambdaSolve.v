@@ -287,17 +287,17 @@ Ltac lambda_solve_step :=
                  | rewrite betapi2 in H ; compute_subst_in H
                        ]
       (* These need to work like this instead of just rewrites to prevent specializing evars *)
-      | |- context [app (lam ?s ?t1) ?t2] =>
+      (*| |- context [app (lam ?s ?t1) ?t2] =>
           hide_evars; rewrite (@beta s t1 t2); compute_subst; unhide_evars
       | |- context [pi1 (pair ?t1 ?t2)] =>
           hide_evars; rewrite (@betapi1 t1 t2); compute_subst; unhide_evars
       | |- context [pi2 (pair ?t1 ?t2)] =>
-          hide_evars; rewrite (@betapi2 t1 t2); compute_subst; unhide_evars
+          hide_evars; rewrite (@betapi2 t1 t2); compute_subst; unhide_evars*)
       end
     )
 .
 
-Ltac lambda_solve := repeat lambda_solve_step.
+Ltac lambda_solve := repeat (try lambda_solve_step; normalize).
 
 Theorem test_10
         (a b : QTerm)
@@ -656,8 +656,6 @@ Proof.
       rewrite Bool.andb_false_r.
       reflexivity.
   - lambda_solve.
-    normalize.
-    reflexivity.
   - subst.
     normalize.
     reflexivity.
@@ -758,9 +756,6 @@ Theorem pattern_case_reverse
         : <`t1 [x] x> = <y x {var "x" 1} {var "x" 2} (`t2[x])>.
 Proof.
   lambda_solve.
-  compute_lifts.
-  normalize.
-  reflexivity.
 Qed.
 
 Theorem pattern_case_2

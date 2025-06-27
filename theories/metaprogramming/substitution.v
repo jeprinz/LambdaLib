@@ -191,8 +191,6 @@ Proof.
   Fail reflexivity.
 Abort.
 
-
-
 Theorem compose_cast
         (ctx1 ctx2 ctx3 ty1 ty2 ty3 tm1 tm2 tm3 : QTerm)
         (lvl1 lvl2 lvl3 : nat)
@@ -213,7 +211,7 @@ Proof.
   subst.
   reflexivity.
 Qed.
-Check f_equal.
+
 Theorem push_transport_through
         (Pctx : QTerm -> QTerm)
         (Plvl : nat -> nat)
@@ -407,6 +405,74 @@ Proof.
   reflexivity.
 Qed.
 
+Theorem push_transport_through_2
+          (Pctx1 Pctx2 : QTerm -> QTerm)
+          (Plvl1 Plvl2 : nat -> nat)
+          (Pty1 Pty2 : QTerm -> QTerm)
+          (Ptm1 Ptm2 : QTerm -> QTerm)
+          (f : forall {ctx lvl ty tm}, Typed (Pctx1 ctx) (Plvl1 lvl) (Pty1 ty) (Ptm1 tm)
+                                       -> Typed (Pctx2 ctx) (Plvl2 lvl) (Pty2 ty) (Ptm2 tm))
+          (ctx1 ctx2 ty1 ty2 tm1 tm2 : QTerm)
+          (lvl1 lvl2 : nat)
+          (pctx : ctx1 = ctx2)
+          (plvl : lvl1 = lvl2)
+          (pty : ty1 = ty2)
+          (ptm : tm1 = tm2)
+          (pctx1 : Pctx1 ctx1 = Pctx1 ctx2)
+          (plvl1 : Plvl1 lvl1 = Plvl1 lvl2)
+          (pty1 : Pty1 ty1 = Pty1 ty2)
+          (ptm1 : Ptm1 tm1 = Ptm1 tm2)
+          (input : Typed (Pctx1 ctx1) (Plvl1 lvl1) (Pty1 ty1) (Ptm1 tm1))
+    : f (@cast _ _ _ _ _ _ _ _ pctx1 plvl1 pty1 ptm1 input) =
+        @cast _ _ _ _ _ _ _ _
+              (f_equal Pctx2 pctx)
+              (f_equal Plvl2 plvl)
+              (f_equal Pty2 pty)
+              (f_equal Ptm2 ptm)
+              (f input).
+Proof.
+  subst.
+  Check uip.
+  rewrite (uip _ _ _ pctx1 eq_refl).
+  rewrite (uip _ _ _ plvl1 eq_refl).
+  rewrite (uip _ _ _ pty1 eq_refl).
+  rewrite (uip _ _ _ ptm1 eq_refl).
+  reflexivity.
+Qed.
+
+Check @lambda.
+Definition push_transport_through_out_type
+           {ctx1 ctx2 A1 A2 B1 B2 s1 s2 : QTerm} {lvl1 lvl2 : nat}
+           (pin1 : <`S.cons `ctx1 {const lvl1} `A1> = <`S.cons `ctx2 {const lvl2} `A2>)
+           (pin2 : lvl1 = lvl2)
+           (pin3 : B1 = B2)
+           (pin4 : s1 = s2)
+           (input : Typed <`S.cons `ctx1 {const lvl1} `A1> lvl1 B1 s1) : Type.
+  refine (lambda (@cast _ _ _ _ _ _ _ _ pin1 pin2 pin3 pin4 input)
+          = @cast _ _ _ _ _ _ _ _ (_) (_) (_) (_) (lambda input)); solve_all.
+Defined.
+
+Theorem push_transport_through_lambda
+        (ctx1 ctx2 A1 A2 B1 B2 s1 s2 : QTerm) (lvl1 lvl2 : nat)
+        (pin1 : <`S.cons `ctx1 {const lvl1} `A1> = <`S.cons `ctx2 {const lvl2} `A2>)
+        (pin2 : lvl1 = lvl2)
+        (pin3 : B1 = B2)
+        (pin4 : s1 = s2)
+        (* Then these inputs will be derived from the tactic: *)
+        (pctx : ctx1 = ctx2)
+        (pA : A1 = A2)
+        (pB : B1 = B2)
+        (input : Typed <`S.cons `ctx1 {const lvl1} `A1> lvl1 B1 s1)
+  : push_transport_through_out_type pin1 pin2 pin3 pin4 input.
+Proof.
+  unfold push_transport_through_out_type.
+  subst.
+  Check uip.
+  rewrite remove_cast.
+  rewrite remove_cast.
+  reflexivity.
+Qed.
+
 Theorem run_ren_2 : run_ren_2_statement.
 Proof.
   unfold run_ren_2_statement, prog1, prog2.
@@ -414,7 +480,7 @@ Proof.
   Check (fun ctx lvl ty tm => @renTerm ctx _ _ lvl ty tm weaken1Ren).
   garbage_compact.
   Check @push_transport_through.
-  Check renTerm.
+  Check @renTerm.
   Time rewrite (@push_transport_through _ _ _ _
                                         (fun ctx lvl ty tm => @renTerm ctx _ _ lvl ty tm weaken1Ren)).
   simpl.
@@ -428,3 +494,19 @@ Proof.
   repeat rewrite compose_castVar.
   rewrite (@push_transport_through_var_term _ _ _ _
                                             (fun ctx lvl ty tm => @var ctx ty tm lvl)).
+  Check @lambda.
+
+  (* The problem is that the indices on the input and output of lambda are not just functions
+   of ctx, lvl, ty, tm, one each. The ctx of the input for example depends on two variables,
+   ctx and A. *)
+  (*rewrite (@push_transport_through_2 _ _ _ _ _ _ _ _ _
+                                     (fun ctx lvl ty tm => @lambda *)
+
+  rewrite push_transport_through_lambda; [| solve_all.. ].
+  rewrite compose_cast.
+  garbage_compact.
+  S.unfold_all.
+  normalize.
+  reflexivity.
+Qed.  
+ 
