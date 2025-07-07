@@ -439,29 +439,7 @@ Proof.
   solve_neutral_unequal_case.
 Qed.
 
-(*
-For now this will be an axiom. I will have to think about what property of the underlying
-terms is needed to give this.
- *)
 
-Inductive PseudoNeutral : QTerm -> Prop :=
-| pn_var : forall s i, PseudoNeutral (var s i)
-| pn_app : forall a b, PseudoNeutral a -> PseudoNeutral (app a b)
-.
-
-Inductive IncompatiblePseudoNeutral : QTerm -> QTerm -> Prop :=
-| inc_var_app : forall s i a b, IncompatiblePseudoNeutral (var s i) (app a b)
-| inc_app_var : forall s i a b, IncompatiblePseudoNeutral (app a b) (var s i)
-| inc_var_var : forall s1 i1 s2 i2, not (s1 = s2 /\ i1 = i2)
-                                    -> IncompatiblePseudoNeutral (var s1 i1) (var s2 i2)
-.
-
-Axiom neutralInj : forall a b c d,
-    PseudoNeutral a -> PseudoNeutral c -> app a b = app c d <-> a = c /\ b = d.
-
-Axiom neutralContradiction : forall t1 t2,
-    PseudoNeutral t1 -> PseudoNeutral t2 -> IncompatiblePseudoNeutral t1 t2
-    -> False.
 
 Ltac neutral_inj_case :=
   match goal with
@@ -514,6 +492,12 @@ Theorem test_unequal_neutral_another_v2
 Proof.
   (*Time solve_neutral_unequal_case.*)
   Time fast_neutral_unequal_case.
+Qed.
+
+Theorem test_unequal_neutral_another_3
+        (H : <a b> = <b c d e>)
+  : False.
+  fast_neutral_unequal_case.
 Qed.
 
 Theorem test_fast_fails_correctly

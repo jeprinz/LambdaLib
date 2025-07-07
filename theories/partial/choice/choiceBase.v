@@ -121,6 +121,7 @@ Theorem chooseOptionSpec1 : forall T P t,
 Proof.
   intros T P t.
   unfold chooseOption.
+  Check choiceInd.
   apply choiceInd.
   intros.
   destruct t0.

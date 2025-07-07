@@ -4,7 +4,7 @@ Require Import -(coercions) qterm.
 (*
 This file will have proofs of various facts that I need about lambda calculus to make the
 unification tactic work.
-These will start as Axioms, and I will prove them eventually.
+These will start as Axioms>, and I will prove them eventually.
 
 For now, I will focus on the minimal things that I need to make things work, and I'll add
 as needed.
@@ -16,31 +16,34 @@ Ltac compute_subst H := repeat (try rewrite subst_app in H;
                                repeat (rewrite lift_lam, lift_app, lift_var in H))).
 Ltac normalize H := repeat (rewrite beta in H; compute_subst H).
 
-
+(*
+For now this will be an axiom. I will have to think about what property of the underlying
+terms is needed to give this.
+ *)
 
 Inductive PseudoNeutral : QTerm -> Prop :=
-| neu_var : forall {n i}, PseudoNeutral (var n i)
-| neu_const : forall {T} {s : T}, PseudoNeutral (const s)
-| neu_app : forall {t1 t2}, PseudoNeutral t1 -> PseudoNeutral (app t1 t2).
+| pn_var : forall s i, PseudoNeutral (var s i)
+| pn_app : forall a b, PseudoNeutral a -> PseudoNeutral (app a b)
+.
 
-(*TODO: Put this in qterm/term with the rest of the stuff *)
-Axiom subst_lift' : forall s1 s2 i1 i2 t t',
-    subst s1 i1 t' (lift s2 i2 t) =
-      (if eqb s1 s2
-       then if Nat.eqb i1 i2 then t else
-              if Nat.ltb i2 i1
-              then lift s2 i2 (subst s1 (pred i1) t' t)
-              else lift s2 (S i2) (subst s1 i1 t' t)
-       else lift s2 i2 (subst s1 i1 t' t)).
+Inductive IncompatiblePseudoNeutral : QTerm -> QTerm -> Prop :=
+| inc_next : forall p1 p2 t1 t2, IncompatiblePseudoNeutral p1 p2
+                                 -> IncompatiblePseudoNeutral (app p1 t1) (app p2 t2)
+| inc_var_app : forall s i a b, IncompatiblePseudoNeutral (var s i) (app a b)
+| inc_app_var : forall s i a b, IncompatiblePseudoNeutral (app a b) (var s i)
+| inc_var_var : forall s1 i1 s2 i2, not (s1 = s2 \/ i1 = i2)
+                                    -> IncompatiblePseudoNeutral (var s1 i1) (var s2 i2)
+.
 
+Axiom neutralInj : forall a b c d,
+    PseudoNeutral a -> PseudoNeutral c -> app a b = app c d <-> a = c /\ b = d.
+
+Axiom neutralContradiction : forall t1 t2,
+    PseudoNeutral t1 -> PseudoNeutral t2 -> IncompatiblePseudoNeutral t1 t2
+    -> False.
 (*
-Axiom subst_subst : forall s1 s2 i1 i2 t1 t2 t,
-    subst s1 i1 t1 (subst s2 i2 t2 t) =
-      if eqb s1 s2
-      then if Nat.ltb i2 i1
-           then _
-           else _
-      else subst s2 i2 (subst s1 i1 t1 t2) (subst s1 i1 t1 t).
+I can probably replace both of these with the single axiom that two constants applied to
+arguments are unequal if they are different constants or have different numbers of arguments.
 *)
 
 Lemma subst_lift_cancel : forall t s i, subst s i (var s i) (lift s (S i) t) = t.
@@ -72,9 +75,6 @@ Proof.
 Qed.
 
 Print Assumptions lamInj.
-
-(* TODO: For now, this will be an axiom. Later I will prove from confluence hopefully *)
-Axiom constInj : forall {T : Type} (t1 t2 : T), const t1 = const t2 -> t1 = t2.
 
 (*Theorem varInj : forall s1 s2 i j, var s1 i = var s2 j -> s1 = s2 /\ i = j.*)
 Theorem varInj : forall s1 s2, var s1 0 = var s2 0 -> s1 = s2.

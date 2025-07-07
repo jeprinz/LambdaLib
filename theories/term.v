@@ -16,7 +16,7 @@ Inductive Constant :=
 | pi1c : Constant
 | pi2c : Constant
 | pairc : Constant
-| anyc : forall {T : Type}, T -> Constant.
+| anyc : string -> Constant.
 
 Inductive Term : Type :=
 | lam : string -> Term -> Term
@@ -30,7 +30,7 @@ Inductive Term : Type :=
 Definition pair t1 t2 := (app (app (const pairc) t1) t2).
 Definition pi1 t := app (const pi1c) t.
 Definition pi2 t := app (const pi2c) t.
-Definition constant {T : Type} (t : T) : Term := const (anyc t).
+Definition constant (t : string) : Term := const (anyc t).
 
 Inductive convertible : Term -> Term -> Prop :=
 | alpha : forall s1 s2 t, convertible (lam s1 t) (lam s2 (subst s1 0 (var s2 0) (lift s2 0 t)))
@@ -126,6 +126,17 @@ For now, consistency will be an axiom. Eventually I will prove it by mapping thi
 into lambda-FP, following Støvring.
 *)
 
-Axiom consistency : exists t1 t2, not (convertible t1 t2).
+(* I could potentially get rid of the need for this if I used variables instead of constants? *)
+Axiom constInj : forall (t1 t2 : string), convertible (const (anyc t1)) (const (anyc t2)) -> t1 = t2.
 
-(*TODO ^^^^^^^*)
+Theorem consistency : exists t1 t2, not (convertible t1 t2).
+Proof.
+  exists (const (anyc "a")).
+  exists (const (anyc "b")).
+  intro c.
+  apply constInj in c.
+  apply eqb_eq in c.
+  simpl in c.
+  inversion c.
+Qed.
+

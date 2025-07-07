@@ -27,14 +27,14 @@ Module Type LambdaSpec.
   Parameter pair : QTerm -> QTerm -> QTerm.
   Parameter pi1 : QTerm -> QTerm.
   Parameter pi2 : QTerm -> QTerm.
-  Parameter const : forall {T : Type}, T -> QTerm.
+  Parameter const : string -> QTerm.
 
   Parameter lift_lam : forall (s1 s2 : string) (i : nat) (t : QTerm),
       lift s1 i (lam s2 t) = lam s2 (lift s1 (if eqb s1 s2 then S i else i) t).
   Parameter lift_app : forall s i t1 t2, lift s i (app t1 t2) = app (lift s i t1) (lift s i t2).
   Parameter lift_var : forall (s1 s2 : string) (i k : nat),
       lift s1 k (var s2 i) = (if andb (s1 =? s2)%string (negb (Nat.ltb i k)) then var s2 (S i) else var s2 i).
-  Parameter lift_const : forall s {T : Type} (t : T) i , lift s i (const t) = const t.
+  Parameter lift_const : forall s (t : string) i , lift s i (const t) = const t.
   Parameter lift_pair : forall s i t1 t2, lift s i (pair t1 t2) = pair (lift s i t1) (lift s i t2).
   Parameter lift_pi1 : forall s i t, lift s i (pi1 t) = pi1 (lift s i t).
   Parameter lift_pi2 : forall s i t, lift s i (pi2 t) = pi2 (lift s i t).
@@ -50,7 +50,7 @@ Module Type LambdaSpec.
      if String.eqb s1 s2
         then if Nat.ltb k i then var s2 (i - 1) else if Nat.eqb i k then toSub
         else var s2 i else var s2 i.
-  Parameter subst_const : forall s {T : Type} (x : T) i t, subst s i t (const x) = const x.
+  Parameter subst_const : forall s (x : string) i t, subst s i t (const x) = const x.
   Parameter subst_pair : forall s i t t1 t2,
       subst s i t (pair t1 t2) = pair (subst s i t t1) (subst s i t t2).
   Parameter subst_pi1 : forall s i t1 t2, subst s i t1 (pi1 t2) = pi1 (subst s i t1 t2).
@@ -76,6 +76,7 @@ Module Type LambdaSpec.
                       else lift s2 (S i2) (lift s1 i1 t)
                  else lift s2 i2 (lift s1 i1 t)).
   Parameter consistency : exists (t1 t2 : QTerm), not (t1 = t2).
+  Parameter constInj : forall (t1 t2 : string), const t1 = const t2 -> t1 = t2.
 End LambdaSpec.
 
 Module Lambda : LambdaSpec.
@@ -100,7 +101,7 @@ Definition subst s i := QTerm.map2 (subst s i) (subst_cong s i).
 Definition pair := QTerm.map2 pair pair_cong.
 Definition pi1 := QTerm.map pi1 pi1_cong.
 Definition pi2 := QTerm.map pi2 pi2_cong.
-Definition const {T : Type} (s : T) := QTerm.mk (constant s).
+Definition const (s : string) := QTerm.mk (constant s).
 
 Check QTerm.sound.
 Check lift_lam.
@@ -262,7 +263,7 @@ Proof.
   apply lift_const.
 Qed.
 
-Theorem lift_const : forall s {T : Type} (t : T) i, lift s i (const t) = const t.
+Theorem lift_const : forall s (t : string) i, lift s i (const t) = const t.
 Proof.
   intros.
   apply lift_internal_const.
@@ -277,7 +278,7 @@ Proof.
   apply subst_const.
 Qed.
 
-Theorem subst_const : forall s {T : Type} (x : T) i t, subst s i t (const x) = const x.
+Theorem subst_const : forall s (x : string) i t, subst s i t (const x) = const x.
 Proof.
   unfold const.
   intros.
@@ -415,6 +416,14 @@ Proof.
   apply eq.
 Qed.
 
+Theorem constInj : forall (t1 t2 : string), const t1 = const t2 -> t1 = t2.
+Proof.
+  intros.
+  apply constInj.
+  apply QTerm.complete.
+  apply H.
+Qed.
+
 End Lambda.
 
 Include Lambda.
@@ -502,4 +511,4 @@ Definition metavar_example: QTerm. exact <fun x => x>. Qed.
 Compute <fun x => x `metavar_example x>.
 
 Notation "{ x }" := x (in custom term_term at level 0, x constr).
-Compute <fun x => {const 10}>.
+Compute <fun x => {const "a"}>.
