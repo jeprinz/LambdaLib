@@ -131,7 +131,7 @@ Theorem runProgDefinitionRec2 {A B : Type} {def : A -> Prog A B}
        * assumption.
      + reflexivity.
  Qed.
- 
+
 Theorem runProgDefinitionRec {A B : Type} {def : A -> Prog A B}
         {I : Type}
         {args : I -> A}

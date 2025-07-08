@@ -1,0 +1,9 @@
+tm : Type
+string : Type
+
+lam : (bind tm in tm) -> tm
+app : tm -> tm -> tm
+const : string -> tm
+pair : tm -> tm -> tm
+fst : tm -> tm
+snd : tm -> tm
