@@ -1,9 +1,10 @@
 tm : Type
 string : Type
+nat : Type
 
 lam : (bind tm in tm) -> tm
 app : tm -> tm -> tm
-const : string -> tm
+const : string -> nat -> tm
 pair : tm -> tm -> tm
 fst : tm -> tm
 snd : tm -> tm

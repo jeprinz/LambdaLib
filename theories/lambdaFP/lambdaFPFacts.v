@@ -16,7 +16,7 @@ Check var_tm.
 Compute (subst_tm var_tm (lam (var_tm 1))).
 Check ids.
 Check scons.
-Compute (subst_tm (scons (const "a") ids) (lam (var_tm 1))).
+Compute (subst_tm (scons (const "a" 0) ids) (lam (var_tm 1))).
 Axiom b : tm.
 (*Compute (b[b..]).*)
 
@@ -50,6 +50,29 @@ Definition conv := clos_refl_trans tm red.
 (* If I had proven this, can I use it to get consistency in term.v? *)
 Axiom consistent : exists t1 t2, not (conv t1 t2).
 (* It will be easier to work with specific terms *)
-Axiom consistent_specific : not (conv (const "A") (const "B")).
+Axiom consistent_specific : not (conv (const "A" 0) (const "B" 0)).
 
-Require Import term.
+Require term.
+
+(* I can work with autosubst substitutions here, because (nat -> tm) is the type it uses. *)
+Definition Env := string -> nat -> tm.
+
+Definition emptyEnv : Env := fun s i => const s i.
+Check scons.
+Definition consEnv (env : Env) (s : string) (t : tm) : Env :=
+  fun s' => if eqb s' s then scons t (env s) else env s'.
+
+
+Print term.Term.
+Print term.Constant.
+Fixpoint termMap (env : string -> nat -> tm) (t : term.Term) : tm.
+  refine (
+      match t with
+      | term.lam s t' => lam (termMap (consEnv env s (var_tm 0)) t)
+      | term.app a b => app (termMap env a) (termMap env b)
+      | term.const (term.anyc s) => const s 0
+      | term.var s i => env s i
+      | term.lift s i t => ren_tm shift (termMap (consEnv env s (var_tm 0)) t)
+      | term.subst s i t1 t2 => _
+      | other => _
+      end).

@@ -107,6 +107,8 @@ Ctransport : (P : T -> Classical Type) -> (Classical (x = y)) -> P x -> Classica
 
 But even if all of that worked, would that really be at all compelling? It kind of makes any
 idea about using this in a practical way seem unrealistic.
+
+LATER: I don't think that I do need the equalities in classical. See Choice1NoLevels.agda
 *)
 
 Definition Cmap {A B : Type} (f : A -> B) (c : Classical A) : Classical B
@@ -207,58 +209,159 @@ Proof.
   destruct q.
 Abort.
 
-(*
-Definition Pif {A : Type} (P : Prop) (a1 a2 : Classical A) : Classical A.
-  refine (exist _ (fun a => (P /\ proj1_sig a1 a) \/ ((not P) /\ proj1_sig a2 a)) _).
- *)
 
-(*
-Theorem PifDef1 : forall (A : Type) P (a1 a2 : A), P -> Pif P a1 a2 = Creturn a1.
+Theorem choiceInd {A B : Type} {P : A -> Prop} {H : exists a, P a}
+        {rest : A -> Classical B} {v : Classical B}
+        (premise : forall x, P x -> rest x = v)
+  : Cbind (choose _ P H) rest = v.
 Proof.
-  intros.
-  apply classicalEq.
-  apply functional_extensionality.
-  intros.
+  apply classicalEq2.
+  extensionality b.
   apply propositional_extensionality.
+  simpl.
   split.
-  - intros.
-    destruct H0.
-    destruct H0.
-    assumption.
-    destruct H0.
-    contradiction.
-  - intros.
+  - intros [a [pa restab]].
+    specialize (premise a pa).
     subst.
-    apply or_introl.
-    split.
     assumption.
-    reflexivity.
-Qed.
-
-Theorem PifDef2 : forall (A : Type) P (a1 a2 : A), not P -> Pif P a1 a2 = Creturn a2.
-Proof.
-  intros.
-  apply classicalEq.
-  apply functional_extensionality.
-  intros.
-  apply propositional_extensionality.
-  split.
   - intros.
-    destruct H0.
-    + destruct H0.
-      contradiction.
-    + destruct H0.
+    destruct H.
+    exists x.
+    split.
+    + assumption.
+    + specialize (premise x H).
+      subst.
       assumption.
-  - intros.
-    subst.
-    apply or_intror.
-    split.
-    assumption.
-    reflexivity.
 Qed.
-*)
+    
 (* We do need partiality for general recursion. Will this work? *)
 Definition Partial (T : Type) : Type := Classical (option T).
+
+Theorem monadlaw2 (T : Type) (t : Classical T) : Cbind t Creturn = t.
+Proof.
+  apply classicalEq2.
+  extensionality x.
+  simpl.
+  apply propositional_extensionality.
+  split.
+  - intros.
+    destruct H as [a [ta p]].
+    subst.
+    assumption.
+  - intros.
+    exists x.
+    auto.
+Qed.
+
+Theorem writeInTermsOfBind (T : Type) (t1 t2 : Classical T)
+        (H : Cbind t1 Creturn = Cbind t2 Creturn)
+  : t1 = t2.
+Proof.
+  repeat rewrite monadlaw2 in H.
+  assumption.
+Qed.
+
+(* I'll do the simple while-loop version of recursion first: *)
+
+Inductive whileR {A B : Type} (step : A -> A + B) : A -> B -> Prop :=
+| while_base : forall a b, step a = inr b -> whileR step a b
+| while_step : forall a a' b, step a = inl a'
+                              -> whileR step a' b
+                              -> whileR step a b
+.
+
+Theorem whileRFunction : forall A B step a b1 b2,
+    @whileR A B step a b1 
+    -> @whileR A B step a b2
+    -> b1 = b2.
+Proof.
+  intros.
+  induction H; inversion H0.
+  - rewrite H in H1.
+    inversion H1.
+    subst.
+    reflexivity.
+  - rewrite H in H1.
+    inversion H1.
+  - rewrite H in H2.
+    inversion H2.
+  - rewrite H in H2.
+    inversion H2.
+    subst.
+    specialize (IHwhileR H3).
+    subst.
+    reflexivity.
+Qed.
+
+Definition while {A B : Type} (a : A) (step : A -> A + B) : Partial B.
+  refine (choose _ (fun ob => match ob with
+                              | None => ~ exists b, whileR step a b
+                              | Some b => whileR step a b
+                              end) _).
+  destruct (classic (exists b, whileR step a b)).
+  - destruct H.
+    exists (Some x).
+    assumption.
+  - exists None.
+    assumption.
+Defined.
+
+Theorem whileBase (A B : Type) step (a : A) (b : B)
+        (H : step a = inr b)
+  : while a step = Creturn (Some b).
+Proof.
+  apply writeInTermsOfBind.
+  rewrite bindDef.
+  unfold while.
+  Check @choiceInd.
+  (* TODO: why are these next two lines like this *)
+  rewrite @choiceInd with (v := Creturn (Some b)).
+  reflexivity.
+  intros.
+  apply f_equal.
+  destruct x.
+  Check (while_base _ _ _ H).
+  Check whileRFunction.
+  - rewrite (whileRFunction _ _ _ _ _ _ (while_base _ _ _ H) H0).
+    reflexivity.
+  - apply while_base in H.
+    exfalso.
+    apply H0.
+    exists b.
+    assumption.
+Qed.
+
+Theorem whileStep (A B : Type) step (a a' : A)
+        (H : step a = inl a')
+  : @while A B a step = while a' step.
+Proof.
+  apply writeInTermsOfBind.
+  Check choiceInd.
+  unfold while.
+  erewrite choiceInd; try reflexivity.
+  symmetry.
+  erewrite choiceInd; try reflexivity.
+  intros.
+  symmetry.
+  apply f_equal.
+
+  destruct x, x0.
+  - rewrite (whileRFunction _ _ _ _ _ _ (while_step _ _ _ _ H H1) H0).
+    reflexivity.
+  - destruct H1.
+    inversion H0.
+    + rewrite H in H1.
+      inversion H1.
+    + rewrite H in H1.
+      inversion H1.
+      subst.
+      exists b.
+      assumption.
+  - destruct H0.
+    exists b.
+    apply while_step with (a' := a'); assumption.
+  - reflexivity.
+Qed.
 
 (* better name? *)
 Definition seqOption (A B : Type) (f : A -> Partial B) : Partial (A -> Classical B).

@@ -1,4 +1,5 @@
 Require Import String.
+
 Require Import core unscoped.
 
 Require Import Setoid Morphisms Relation_Definitions.
@@ -10,7 +11,7 @@ Inductive tm : Type :=
   | var_tm : nat -> tm
   | lam : tm -> tm
   | app : tm -> tm -> tm
-  | const : string -> tm
+  | const : string -> nat -> tm
   | pair : tm -> tm -> tm
   | fst : tm -> tm
   | snd : tm -> tm.
@@ -27,10 +28,11 @@ exact (eq_trans (eq_trans eq_refl (ap (fun x => app x s1) H0))
          (ap (fun x => app t0 x) H1)).
 Qed.
 
-Lemma congr_const {s0 : string} {t0 : string} (H0 : s0 = t0) :
-  const s0 = const t0.
+Lemma congr_const {s0 : string} {s1 : nat} {t0 : string} {t1 : nat}
+  (H0 : s0 = t0) (H1 : s1 = t1) : const s0 s1 = const t0 t1.
 Proof.
-exact (eq_trans eq_refl (ap (fun x => const x) H0)).
+exact (eq_trans (eq_trans eq_refl (ap (fun x => const x s1) H0))
+         (ap (fun x => const t0 x) H1)).
 Qed.
 
 Lemma congr_pair {s0 : tm} {s1 : tm} {t0 : tm} {t1 : tm} (H0 : s0 = t0)
@@ -60,7 +62,7 @@ Fixpoint ren_tm (xi_tm : nat -> nat) (s : tm) {struct s} : tm :=
   | var_tm s0 => var_tm (xi_tm s0)
   | lam s0 => lam (ren_tm (upRen_tm_tm xi_tm) s0)
   | app s0 s1 => app (ren_tm xi_tm s0) (ren_tm xi_tm s1)
-  | const s0 => const s0
+  | const s0 s1 => const s0 s1
   | pair s0 s1 => pair (ren_tm xi_tm s0) (ren_tm xi_tm s1)
   | fst s0 => fst (ren_tm xi_tm s0)
   | snd s0 => snd (ren_tm xi_tm s0)
@@ -76,7 +78,7 @@ Fixpoint subst_tm (sigma_tm : nat -> tm) (s : tm) {struct s} : tm :=
   | var_tm s0 => sigma_tm s0
   | lam s0 => lam (subst_tm (up_tm_tm sigma_tm) s0)
   | app s0 s1 => app (subst_tm sigma_tm s0) (subst_tm sigma_tm s1)
-  | const s0 => const s0
+  | const s0 s1 => const s0 s1
   | pair s0 s1 => pair (subst_tm sigma_tm s0) (subst_tm sigma_tm s1)
   | fst s0 => fst (subst_tm sigma_tm s0)
   | snd s0 => snd (subst_tm sigma_tm s0)
@@ -101,7 +103,7 @@ subst_tm sigma_tm s = s :=
       congr_lam (idSubst_tm (up_tm_tm sigma_tm) (upId_tm_tm _ Eq_tm) s0)
   | app s0 s1 =>
       congr_app (idSubst_tm sigma_tm Eq_tm s0) (idSubst_tm sigma_tm Eq_tm s1)
-  | const s0 => congr_const (eq_refl s0)
+  | const s0 s1 => congr_const (eq_refl s0) (eq_refl s1)
   | pair s0 s1 =>
       congr_pair (idSubst_tm sigma_tm Eq_tm s0)
         (idSubst_tm sigma_tm Eq_tm s1)
@@ -131,7 +133,7 @@ ren_tm xi_tm s = ren_tm zeta_tm s :=
   | app s0 s1 =>
       congr_app (extRen_tm xi_tm zeta_tm Eq_tm s0)
         (extRen_tm xi_tm zeta_tm Eq_tm s1)
-  | const s0 => congr_const (eq_refl s0)
+  | const s0 s1 => congr_const (eq_refl s0) (eq_refl s1)
   | pair s0 s1 =>
       congr_pair (extRen_tm xi_tm zeta_tm Eq_tm s0)
         (extRen_tm xi_tm zeta_tm Eq_tm s1)
@@ -162,7 +164,7 @@ subst_tm sigma_tm s = subst_tm tau_tm s :=
   | app s0 s1 =>
       congr_app (ext_tm sigma_tm tau_tm Eq_tm s0)
         (ext_tm sigma_tm tau_tm Eq_tm s1)
-  | const s0 => congr_const (eq_refl s0)
+  | const s0 s1 => congr_const (eq_refl s0) (eq_refl s1)
   | pair s0 s1 =>
       congr_pair (ext_tm sigma_tm tau_tm Eq_tm s0)
         (ext_tm sigma_tm tau_tm Eq_tm s1)
@@ -189,7 +191,7 @@ Fixpoint compRenRen_tm (xi_tm : nat -> nat) (zeta_tm : nat -> nat)
   | app s0 s1 =>
       congr_app (compRenRen_tm xi_tm zeta_tm rho_tm Eq_tm s0)
         (compRenRen_tm xi_tm zeta_tm rho_tm Eq_tm s1)
-  | const s0 => congr_const (eq_refl s0)
+  | const s0 s1 => congr_const (eq_refl s0) (eq_refl s1)
   | pair s0 s1 =>
       congr_pair (compRenRen_tm xi_tm zeta_tm rho_tm Eq_tm s0)
         (compRenRen_tm xi_tm zeta_tm rho_tm Eq_tm s1)
@@ -221,7 +223,7 @@ subst_tm tau_tm (ren_tm xi_tm s) = subst_tm theta_tm s :=
   | app s0 s1 =>
       congr_app (compRenSubst_tm xi_tm tau_tm theta_tm Eq_tm s0)
         (compRenSubst_tm xi_tm tau_tm theta_tm Eq_tm s1)
-  | const s0 => congr_const (eq_refl s0)
+  | const s0 s1 => congr_const (eq_refl s0) (eq_refl s1)
   | pair s0 s1 =>
       congr_pair (compRenSubst_tm xi_tm tau_tm theta_tm Eq_tm s0)
         (compRenSubst_tm xi_tm tau_tm theta_tm Eq_tm s1)
@@ -265,7 +267,7 @@ ren_tm zeta_tm (subst_tm sigma_tm s) = subst_tm theta_tm s :=
   | app s0 s1 =>
       congr_app (compSubstRen_tm sigma_tm zeta_tm theta_tm Eq_tm s0)
         (compSubstRen_tm sigma_tm zeta_tm theta_tm Eq_tm s1)
-  | const s0 => congr_const (eq_refl s0)
+  | const s0 s1 => congr_const (eq_refl s0) (eq_refl s1)
   | pair s0 s1 =>
       congr_pair (compSubstRen_tm sigma_tm zeta_tm theta_tm Eq_tm s0)
         (compSubstRen_tm sigma_tm zeta_tm theta_tm Eq_tm s1)
@@ -309,7 +311,7 @@ subst_tm tau_tm (subst_tm sigma_tm s) = subst_tm theta_tm s :=
   | app s0 s1 =>
       congr_app (compSubstSubst_tm sigma_tm tau_tm theta_tm Eq_tm s0)
         (compSubstSubst_tm sigma_tm tau_tm theta_tm Eq_tm s1)
-  | const s0 => congr_const (eq_refl s0)
+  | const s0 s1 => congr_const (eq_refl s0) (eq_refl s1)
   | pair s0 s1 =>
       congr_pair (compSubstSubst_tm sigma_tm tau_tm theta_tm Eq_tm s0)
         (compSubstSubst_tm sigma_tm tau_tm theta_tm Eq_tm s1)
@@ -394,7 +396,7 @@ Fixpoint rinst_inst_tm (xi_tm : nat -> nat) (sigma_tm : nat -> tm)
   | app s0 s1 =>
       congr_app (rinst_inst_tm xi_tm sigma_tm Eq_tm s0)
         (rinst_inst_tm xi_tm sigma_tm Eq_tm s1)
-  | const s0 => congr_const (eq_refl s0)
+  | const s0 s1 => congr_const (eq_refl s0) (eq_refl s1)
   | pair s0 s1 =>
       congr_pair (rinst_inst_tm xi_tm sigma_tm Eq_tm s0)
         (rinst_inst_tm xi_tm sigma_tm Eq_tm s1)
