@@ -2,6 +2,8 @@ Require Import lambdaFP.
 Require Import core unscoped.
 Require Import String.
 
+Print tm.
+
 (*
 In this file, I will
 [ ] - define the reduction relations that I need
