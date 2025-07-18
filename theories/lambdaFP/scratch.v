@@ -325,19 +325,28 @@ Inductive parb : Term -> Term -> Prop :=
 (* Meaningful things *)
 | par_beta : forall s a a' b b',
     parb a a' -> parb b b' ->
-    parb (app (lam s a) b) (subst s 0 b' a)
-| par_pi1 : forall a b, parb (pi1 (pair a b)) a (* TODO: the input*)
-| par_pi2 : forall a b, parb (pi2 (pair a b)) b
-| parb_id : forall t, parb t t.
+    parb (app (lam s a) b) (subst s 0 b' a')
+| par_pi1 : forall a a' b,
+    parb a a' -> parb (pi1 (pair a b)) a' (* TODO: the input*)
+| par_pi2 : forall a b b',
+    parb b b' -> parb (pi2 (pair a b)) b'
+| parb_const : forall c, parb (const c) (const c)
+| parb_var : forall s i, parb (var s i) (var s i).
 
-Theorem parb_lift : forall t1 t2 t3 s i,
+Theorem parb_id : forall t, parb t t.
+Proof.
+  intros.
+  induction t; repeat (try constructor; try assumption).
+Qed.
+
+Theorem parb_lift : forall t1 t2 s i,
     parb t1 t2
-    -> parb (subst s i t3 t1) (subst s i t3 t2).
+    -> parb (lift s i t1) (lift s i t2).
 Proof.
   intros.
   generalize dependent i.
-  generalize dependent t3.
   induction H.
+  (* par_lam *)
   - simpl.
     intros.
     destruct (eqb s0 s).
@@ -345,15 +354,244 @@ Proof.
       apply IHparb.
     + apply par_lam.
       apply IHparb.
+  (* par_app *)
   - intros.
     simpl.
     apply par_app.
     + apply IHparb1.
     + apply IHparb2.
+  (* beta *)
   - intros.
     simpl.
-    destruct (eqb s0 s).
-    + Check par_beta.
-      
+    case_nat_comparisons.
+    +
+      rewrite lift_subst.
+      case_nat_comparisons.
       apply par_beta.
-    
+      * apply IHparb1.
+      * apply IHparb2.
+    + rewrite lift_subst.
+      case_nat_comparisons.
+      apply par_beta.
+      * apply IHparb1.
+      * apply IHparb2.
+  (* pi1 *)
+  - intros.
+    simpl.
+    apply par_pi1.
+    apply IHparb.
+  (* pi2 *)
+  - intros.
+    apply par_pi2.
+    apply IHparb.
+  (* par_const *)
+  - intros.
+    constructor.
+  - intros.
+    apply parb_id.
+Qed.
+(* TODO: The above theorem is almost identical to parb_subst. Can I do something about that? *)
+
+Theorem parb_subst2 : forall t1 t2 t3 s i,
+    parb t1 t2
+    -> parb (subst s i t3 t1) (subst s i t3 t2).
+Proof.
+  intros.
+  generalize dependent i.
+  generalize dependent t3.
+  induction H.
+  (* par_lam *)
+  - simpl.
+    intros.
+    destruct (eqb s0 s).
+    + apply par_lam.
+      apply IHparb.
+    + apply par_lam.
+      apply IHparb.
+  (* par_app *)
+  - intros.
+    simpl.
+    apply par_app.
+    + apply IHparb1.
+    + apply IHparb2.
+  (* beta *)
+  - intros.
+    simpl.
+    case_nat_comparisons.
+    + rewrite subst_subst.
+      case_nat_comparisons.
+      apply par_beta.
+      * apply IHparb1.
+      * apply IHparb2.
+    + rewrite subst_subst.
+      case_nat_comparisons.
+      apply par_beta.
+      * apply IHparb1.
+      * apply IHparb2.
+  (* pi1 *)
+  - intros.
+    simpl.
+    apply par_pi1.
+    apply IHparb.
+  (* pi2 *)
+  - intros.
+    apply par_pi2.
+    apply IHparb.
+  (* par_const *)
+  - intros.
+    constructor.
+  - intros.
+    apply parb_id.
+Qed.
+
+Theorem parb_subst1 : forall a b c s i,
+    parb a c
+    -> parb (subst s i a b) (subst s i c b).
+Proof.
+  intros.
+  generalize dependent i.
+  generalize dependent a.
+  generalize dependent c.
+  induction b.
+  (* lam *)
+  - intros.
+    simpl.
+    case_nat_comparisons;
+      apply par_lam;
+      apply IHb;
+      apply parb_lift;
+      assumption.
+  (* app *)
+  - intros.
+    simpl.
+    apply par_app.
+    + apply IHb1.
+      assumption.
+    + apply IHb2.
+      assumption.
+  (* const *)
+  - intros.
+    simpl.
+    apply parb_id.
+  (* var *)
+  - intros.
+    simpl.
+    case_nat_comparisons;
+      try apply parb_id.
+    + assumption.
+Qed.
+
+Theorem parb_subst : forall a b c d s i,
+    parb a c
+    -> parb b d
+    -> parb (subst s i a b) (subst s i c d).
+Proof.
+  (* This doesn't actually follow from the other two does it *)
+  intros.
+  generalize dependent c.
+  generalize dependent a.
+  generalize dependent i.
+  induction H0.
+  (* par_lam *)
+  - intros.
+    simpl.
+    case_nat_comparisons;
+      apply par_lam;
+      apply IHparb;
+      apply parb_lift;
+      assumption.
+  (* par_app *)
+  - intros.
+    simpl.
+    apply par_app.
+    + apply IHparb1.
+      assumption.
+    + apply IHparb2.
+      assumption.
+  (* beta *)
+  - intros.
+    simpl.
+    case_nat_comparisons.
+    + rewrite subst_subst.
+      case_nat_comparisons.
+      apply par_beta.
+      * apply IHparb1.
+        apply parb_lift.
+        assumption.
+      * apply IHparb2.
+        assumption.
+    + rewrite subst_subst.
+      case_nat_comparisons.
+      apply par_beta.
+      * apply IHparb1.
+        apply parb_lift.
+        assumption.
+      * apply IHparb2.
+        assumption.
+  (* pi1 *)
+  - intros.
+    simpl.
+    apply par_pi1.
+    apply IHparb.
+    assumption.
+  (* pi2 *)
+  - intros.
+    apply par_pi2.
+    apply IHparb.
+    assumption.
+  (* par_const *)
+  - intros.
+    constructor.
+  - intros.
+    simpl.
+    case_nat_comparisons; try apply parb_id.
+    + assumption.
+Qed.
+  
+Theorem parb_diamond : forall a b c,
+    parb a b
+    -> parb a c
+    -> exists d, parb b d /\ parb c d.
+Proof.
+  intros.
+  generalize dependent H0.
+  generalize dependent c.
+  induction H.
+  (* par_lam *)
+  - intros.
+    inversion H0.
+    (* par_lam x par_lam *)
+    + subst.
+      specialize (IHparb _ H4).
+      destruct IHparb.
+      destruct H1.
+      eexists.
+      split.
+      
+      * apply par_lam.
+      apply H1.
+      * apply par_lam.
+        apply H2.
+  (* par_app *)
+  - intros.
+    inversion H1.
+    (* par_app x par_app *)
+    + subst.
+      specialize (IHparb1 _ H4) as [out1 [p1 q1]].
+      specialize (IHparb2 _ H6) as [out2 [p2 q2]].
+      exists (app out1 out2).
+      split; apply par_app; assumption.
+    (* par_app x par_beta *)
+    + subst.
+      inversion H; clear H; subst.
+      specialize (IHparb1 _ (par_lam _ _ _ H4)) as [out1 [p1 q1]].
+      specialize (IHparb2 _ H6) as [out2 [p2 q2]].
+      inversion p1; clear p1; subst.
+      inversion q1; clear q1; subst.
+      exists (subst s 0 out2 b1).
+      split.
+      * apply par_beta.
+        assumption.
+        assumption.
+      * Check parb_subst.
+        apply parb_subst.
