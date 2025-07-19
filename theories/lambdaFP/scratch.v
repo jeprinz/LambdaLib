@@ -320,7 +320,7 @@ Inductive red : Term -> Term -> Prop :=
 Inductive parb : Term -> Term -> Prop :=
 (* Congruences *)
 | par_lam : forall s a b, parb a b -> parb (lam s a) (lam s b)
-| par_app : forall a a' b b',
+| par_app : forall {a a' b b'},
     parb a a' -> parb b b' -> parb (app a b) (app a' b')
 (* Meaningful things *)
 | par_beta : forall s a a' b b',
@@ -392,95 +392,6 @@ Proof.
 Qed.
 (* TODO: The above theorem is almost identical to parb_subst. Can I do something about that? *)
 
-Theorem parb_subst2 : forall t1 t2 t3 s i,
-    parb t1 t2
-    -> parb (subst s i t3 t1) (subst s i t3 t2).
-Proof.
-  intros.
-  generalize dependent i.
-  generalize dependent t3.
-  induction H.
-  (* par_lam *)
-  - simpl.
-    intros.
-    destruct (eqb s0 s).
-    + apply par_lam.
-      apply IHparb.
-    + apply par_lam.
-      apply IHparb.
-  (* par_app *)
-  - intros.
-    simpl.
-    apply par_app.
-    + apply IHparb1.
-    + apply IHparb2.
-  (* beta *)
-  - intros.
-    simpl.
-    case_nat_comparisons.
-    + rewrite subst_subst.
-      case_nat_comparisons.
-      apply par_beta.
-      * apply IHparb1.
-      * apply IHparb2.
-    + rewrite subst_subst.
-      case_nat_comparisons.
-      apply par_beta.
-      * apply IHparb1.
-      * apply IHparb2.
-  (* pi1 *)
-  - intros.
-    simpl.
-    apply par_pi1.
-    apply IHparb.
-  (* pi2 *)
-  - intros.
-    apply par_pi2.
-    apply IHparb.
-  (* par_const *)
-  - intros.
-    constructor.
-  - intros.
-    apply parb_id.
-Qed.
-
-Theorem parb_subst1 : forall a b c s i,
-    parb a c
-    -> parb (subst s i a b) (subst s i c b).
-Proof.
-  intros.
-  generalize dependent i.
-  generalize dependent a.
-  generalize dependent c.
-  induction b.
-  (* lam *)
-  - intros.
-    simpl.
-    case_nat_comparisons;
-      apply par_lam;
-      apply IHb;
-      apply parb_lift;
-      assumption.
-  (* app *)
-  - intros.
-    simpl.
-    apply par_app.
-    + apply IHb1.
-      assumption.
-    + apply IHb2.
-      assumption.
-  (* const *)
-  - intros.
-    simpl.
-    apply parb_id.
-  (* var *)
-  - intros.
-    simpl.
-    case_nat_comparisons;
-      try apply parb_id.
-    + assumption.
-Qed.
-
 Theorem parb_subst : forall a b c d s i,
     parb a c
     -> parb b d
@@ -547,7 +458,12 @@ Proof.
     case_nat_comparisons; try apply parb_id.
     + assumption.
 Qed.
-  
+
+Ltac invert_singletons :=
+  repeat match goal with
+         | H : parb ?x ?y |- _ => inversion H; [clear H; subst]
+         end.
+
 Theorem parb_diamond : forall a b c,
     parb a b
     -> parb a c
@@ -594,4 +510,85 @@ Proof.
         assumption.
         assumption.
       * Check parb_subst.
-        apply parb_subst.
+        apply parb_subst; assumption.
+    (* par_app x par_pi1 *)
+    + subst.
+      invert_singletons.
+      specialize (IHparb1 _ (parb_const pi1c)) as [out1 [p1 q1]].
+      specialize (IHparb2 _ (par_app (par_app (parb_const pairc) H5) H7)) as [out2 [p2 q2]].
+      invert_singletons.
+      exists b'2.
+      split.
+      * apply par_pi1.
+        assumption.
+      * assumption.
+    + subst.
+      invert_singletons.
+      specialize (IHparb1 _ (parb_const pi2c)) as [out1 [p1 q1]].
+      specialize (IHparb2 _ (par_app (par_app (parb_const pairc) H8) H5)) as [out2 [p2 q2]].
+      invert_singletons.
+      exists b'1.
+      split.
+      * apply par_pi2.
+        assumption.
+      * assumption.
+  (* par_beta *)
+  - intros.
+    inversion H1; clear H1; subst.
+    (* par_beta x par_app *)
+    + invert_singletons.
+      specialize (IHparb1 _ H5) as [out1 [p1 q1]].
+      specialize (IHparb2 _ H6) as [out2 [p2 q2]].
+      exists (subst s 0 out2 out1).
+      split.
+      * apply parb_subst; assumption.
+      * apply par_beta; assumption.
+    (* par_beta x par_beta *)
+    + specialize (IHparb1 _ H6) as [out1 [p1 q1]].
+      specialize (IHparb2 _ H7) as [out2 [p2 q2]].
+      exists (subst s 0 out2 out1).
+      split.
+      * apply parb_subst; assumption.
+      * apply parb_subst; assumption.
+  (* par_pi1 *)
+  - intros.
+    inversion H0; clear H0; subst.
+    (* par_pi1 x par_app *)
+    + invert_singletons.
+      specialize (IHparb _ H7) as [out [p q]].
+      exists out.
+      split.
+      * assumption.
+      * apply par_pi1.
+        assumption.
+    (* par_pi1 x par_pi1 *)
+    + specialize (IHparb _ H4) as [out [p q]].
+      exists out.
+      split; assumption.
+  (* par_pi2 *)
+  - intros.
+    inversion H0; clear H0; subst.
+    (* par_pi2 x par_app *)
+    + invert_singletons.
+      specialize (IHparb _ H6) as [out [p q]].
+      exists out.
+      split.
+      * assumption.
+      * apply par_pi2.
+        assumption.
+    (* par_pi2 x par_pi2 *)
+    + specialize (IHparb _ H4) as [out [p q]].
+      exists out.
+      split; assumption.
+  (* par_const x par_const *)
+  - intros.
+    invert_singletons.
+    exists (const c).
+    split; constructor.
+  (* par_var x par_var *)
+  - intros.
+    invert_singletons.
+    exists (var s i).
+    split; constructor.
+Qed.
+
