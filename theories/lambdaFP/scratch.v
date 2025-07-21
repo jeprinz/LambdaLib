@@ -722,56 +722,93 @@ Proof.
     assumption.
 Qed.
 
-Theorem pare_diamond : forall a b c,
-    pare a b
-    -> pare a c
-    -> exists d, pare b d /\ pare c d.
+Theorem pare_diamond a b c
+    (r1 : pare a b)
+    (r2 : pare a c)
+    : exists d, pare b d /\ pare c d.
 Proof.
   intros.
-  generalize dependent H0.
   generalize dependent c.
-  induction H.
+  induction r1.
   (* par_lam *)
   - intros.
-    inversion H0; subst.
+    remember (lam s a) as x.
+    induction r2; inversion Heqx.
     (* par_lam x par_lam *)
-    + specialize (IHpare _ H4).
-      destruct IHpare.
-      destruct H1.
-      eexists.
-      split.
-      * apply pare_lam.
-      apply H1.
-      * apply pare_lam.
-        apply H2.
-    (* par_lam x par_eta *)
-    + give_up.
-    (* par_lam x par_Sp *)
-    + give_up.
+    + inversion Heqx; [clear Heqx; subst].
+      specialize (IHr1 _ r2) as [out [p q]].
+      exists (lam s out).
+      split; constructor; assumption.
+    + subst.
+      specialize (IHr2 eq_refl) as [out2 [p2 q2]].
+      exists (lam s0 (app (lift s0 0 out2) (var s0 0))).
+      split; solve [repeat (try constructor; try assumption; try apply pare_lift)].
+    (* par_lam x par_SP *)
+    + subst.
+      specialize (IHr2 eq_refl) as [out [p q]].
+      exists (pair (pi1 out) (pi2 out)).
+      split; solve [repeat (try constructor; try assumption; try apply pare_lift)].
   (* par_app *)
   - intros.
-    inversion H1.
+    remember (app a b) as x.
+    induction r2; inversion Heqx.
     (* par_app x par_app *)
     + subst.
-      specialize (IHpare1 _ H4) as [out1 [p1 q1]].
-      specialize (IHpare2 _ H6) as [out2 [p2 q2]].
+      specialize (IHr1_1 _ r2_1) as [out1 [p1 q1]].
+      specialize (IHr1_2 _ r2_2) as [out2 [p2 q2]].
       exists (app out1 out2).
       split; apply pare_app; assumption.
     (* par_app x par_eta *)
-    + give_up.
+    + subst.
+      specialize (IHr2 eq_refl) as [out2 [p2 q2]].
+      exists (lam s (app (lift s 0 out2) (var s 0))).
+      split; solve [repeat (try constructor; try assumption; try apply pare_lift)].
     (* par_app x par_Sp *)
-    + give_up.
+    + subst.
+      specialize (IHr2 eq_refl) as [out [p q]].
+      exists (pair (pi1 out) (pi2 out)).
+      split; solve [repeat (try constructor; try assumption; try apply pare_lift)].
   (* pare_const *)
   - intros.
-    give_up.
+    remember (const c) as x.
+    induction r2; inversion Heqx.
+    (* par_const x par_const *)
+    + subst.
+      exists (const c).
+      split; constructor.
+    (* par_const x par_eta *)
+    + subst.
+      specialize (IHr2 eq_refl) as [out2 [p2 q2]].
+      exists (lam s (app (lift s 0 out2) (var s 0))).
+      split; solve [repeat (try constructor; try assumption; try apply pare_lift)].
+    (* par_const x par_Sp *)
+    + subst.
+      specialize (IHr2 eq_refl) as [out [p q]].
+      exists (pair (pi1 out) (pi2 out)).
+      split; solve [repeat (try constructor; try assumption; try apply pare_lift)].
   (* pare_var *)
   - intros.
-    give_up.
+    remember (var s i) as x.
+    induction r2; inversion Heqx.
+    (* par_const x par_const *)
+    + subst.
+      exists (var s i).
+      split; constructor.
+    (* par_const x par_eta *)
+    + subst.
+      specialize (IHr2 eq_refl) as [out2 [p2 q2]].
+      exists (lam s0 (app (lift s0 0 out2) (var s0 0))).
+      split; solve [repeat (try constructor; try assumption; try apply pare_lift)].
+    (* par_const x par_Sp *)
+    + subst.
+      specialize (IHr2 eq_refl) as [out [p q]].
+      exists (pair (pi1 out) (pi2 out)).
+      split; solve [repeat (try constructor; try assumption; try apply pare_lift)].
   (* _ x par_eta *)
   - intros.
-    specialize (IHpare _ H0).
-    destruct IHpare.
-    destruct H1.
+    specialize (IHr1 _ r2).
+    destruct IHr1.
+    destruct H.
     exists (lam s (app (lift s 0 x) (var s 0))).
     split.
     + apply pare_lam.
@@ -781,6 +818,9 @@ Proof.
       * apply pare_var.
     + apply par_eta.
       assumption.
-  (* So when the induction is going the right way around, this is fine.
-   How should I deal with this revered cases? *)
-  - 
+  (* _ x par_SP *)
+  - intros.
+    specialize (IHr1 _ r2) as [out [p q]].
+    exists (pair (pi1 out) (pi2 out)).
+    split; solve [repeat (try constructor; try assumption; try apply pare_lift)].
+Qed.
