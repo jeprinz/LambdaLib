@@ -259,7 +259,7 @@ Ltac simplify_nat_string_eqs :=
     ?PeanoNat.Nat.ltb_ge,
     ?PeanoNat.Nat.eqb_eq,
     ?PeanoNat.Nat.eqb_neq in *;
-  match goal with
+  repeat match goal with
   | H : le ?x 0 |- _ => apply Arith_base.le_n_0_eq_stt in H
   end;
   subst.
@@ -592,3 +592,195 @@ Proof.
     split; constructor.
 Qed.
 
+Inductive pare : Term -> Term -> Prop :=
+(* Congruences *)
+| pare_lam : forall s a b, pare a b -> pare (lam s a) (lam s b)
+| pare_app : forall {a a' b b'},
+    pare a a' -> pare b b' -> pare (app a b) (app a' b')
+| pare_const : forall c, pare (const c) (const c)
+| pare_var : forall s i, pare (var s i) (var s i)
+(* Meaningful things *)
+| par_eta : forall s a b,
+    pare a b -> pare a (lam s (app (lift s 0 b) (var s 0)))
+| par_SP : forall a b,
+    pare a b -> pare a (pair (pi1 b) (pi2 b))
+.
+
+Theorem pare_id : forall t, pare t t.
+Proof.
+  intros.
+  induction t; repeat (try constructor; try assumption).
+Qed.
+
+Theorem pare_lift : forall t1 t2 s i,
+    pare t1 t2
+    -> pare (lift s i t1) (lift s i t2).
+Proof.
+  intros.
+  generalize dependent i.
+  induction H.
+  (* pare_lam *)
+  - simpl.
+    intros.
+    destruct (eqb s0 s).
+    + apply pare_lam.
+      apply IHpare.
+    + apply pare_lam.
+      apply IHpare.
+  (* pare_app *)
+  - intros.
+    simpl.
+    apply pare_app.
+    + apply IHpare1.
+    + apply IHpare2.
+  (* pare_const *)
+  - intros.
+    apply pare_id.
+  (* pare_var *)
+  - intros.
+    apply pare_id.
+  (* par_eta *)
+  - intros.
+    simpl.
+    case_nat_comparisons;
+      rewrite lift_lift;
+      case_nat_comparisons;
+      apply par_eta;
+      apply IHpare.
+  (* par_SP *)
+  - intros.
+    apply par_SP.
+    apply IHpare.
+Qed.
+
+Lemma cast {A B : Type} (a : A) (p : A = B) : B.
+  subst.
+  assumption.
+Defined.
+
+Theorem pare_subst : forall a b c d s i,
+    pare a c
+    -> pare b d
+    -> pare (subst s i a b) (subst s i c d).
+Proof.
+  (* This doesn't actually follow from the other two does it *)
+  intros.
+  generalize dependent c.
+  generalize dependent a.
+  generalize dependent i.
+  induction H0.
+  (* pare_lam *)
+  - intros.
+    simpl.
+    case_nat_comparisons;
+      apply pare_lam;
+      apply IHpare;
+      apply pare_lift;
+      assumption.
+  (* pare_app *)
+  - intros.
+    simpl.
+    apply pare_app.
+    + apply IHpare1.
+      assumption.
+    + apply IHpare2.
+      assumption.
+  (* pare_const *)
+  - intros.
+    apply pare_id.
+  (* pare_var *)
+  - intros.
+    simpl.
+    case_nat_comparisons; try apply pare_id.
+    assumption.
+  (* par_eta *)
+  - intros.
+    simpl.
+    case_nat_comparisons.
+    + simplify_nat_string_eqs.
+      Check par_eta.
+      assert (fact := par_eta s _ _ (IHpare i _ _ H)).
+      apply (cast fact).
+      rewrite lift_subst.
+      case_nat_comparisons.
+      * reflexivity.
+      * simplify_nat_string_eqs.
+        rewrite subst_lift_off_by_1.
+        reflexivity.
+    + simplify_nat_string_eqs.
+      Check par_eta.
+      assert (fact := par_eta s0 _ _ (IHpare i _ _ H)).
+      apply (cast fact).
+      rewrite lift_subst.
+      case_nat_comparisons;
+        reflexivity.
+  (* par_SP *)
+  - intros.
+    simpl.
+    apply par_SP.
+    apply IHpare.
+    assumption.
+Qed.
+
+Theorem pare_diamond : forall a b c,
+    pare a b
+    -> pare a c
+    -> exists d, pare b d /\ pare c d.
+Proof.
+  intros.
+  generalize dependent H0.
+  generalize dependent c.
+  induction H.
+  (* par_lam *)
+  - intros.
+    inversion H0; subst.
+    (* par_lam x par_lam *)
+    + specialize (IHpare _ H4).
+      destruct IHpare.
+      destruct H1.
+      eexists.
+      split.
+      * apply pare_lam.
+      apply H1.
+      * apply pare_lam.
+        apply H2.
+    (* par_lam x par_eta *)
+    + give_up.
+    (* par_lam x par_Sp *)
+    + give_up.
+  (* par_app *)
+  - intros.
+    inversion H1.
+    (* par_app x par_app *)
+    + subst.
+      specialize (IHpare1 _ H4) as [out1 [p1 q1]].
+      specialize (IHpare2 _ H6) as [out2 [p2 q2]].
+      exists (app out1 out2).
+      split; apply pare_app; assumption.
+    (* par_app x par_eta *)
+    + give_up.
+    (* par_app x par_Sp *)
+    + give_up.
+  (* pare_const *)
+  - intros.
+    give_up.
+  (* pare_var *)
+  - intros.
+    give_up.
+  (* _ x par_eta *)
+  - intros.
+    specialize (IHpare _ H0).
+    destruct IHpare.
+    destruct H1.
+    exists (lam s (app (lift s 0 x) (var s 0))).
+    split.
+    + apply pare_lam.
+      apply pare_app.
+      * apply pare_lift.
+        assumption.
+      * apply pare_var.
+    + apply par_eta.
+      assumption.
+  (* So when the induction is going the right way around, this is fine.
+   How should I deal with this revered cases? *)
+  - 
