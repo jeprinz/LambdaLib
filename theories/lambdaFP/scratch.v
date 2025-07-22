@@ -317,6 +317,7 @@ Inductive red : Term -> Term -> Prop :=
 | red_SP : forall t, red t (pair (pi1 t) (pi2 t))
 .
 
+(* TODO: I forgot the commutation rules! *)
 Inductive parb : Term -> Term -> Prop :=
 (* Congruences *)
 | par_lam : forall s a b, parb a b -> parb (lam s a) (lam s b)
@@ -1029,34 +1030,97 @@ Definition confluent {A} (R : relation A) : Prop :=
 
 Definition commute {A} (R S : relation A) : Prop := square R S S R.
 
+Definition diamond {A} (R : relation A) : Prop := square R R R R.
+
 (* Next, I need the commutative union theorem.
  Can I somehow get that frmo Hindley Rosen? *)
 
+Theorem diamond_property {A} {R : relation A} : diamond R -> confluent R.
+Proof.
+  unfold diamond, confluent.
+  intros.
+  apply hindley_rosen.
+  unfold square in *.
+  intros.
+  specialize (H x y z H0 H1) as [w [Ryw Rzw]].
+  exists w.
+  split; solve [constructor; assumption].
+Qed.
 
 From Stdlib Require Import Classes.RelationClasses.
 Search (relation _ -> relation _ -> relation _).
 
+(*
+I should be able to use the diamond property on (clos_refl_trans (relation_disjunction R S))
+ *)
+
+Theorem closure_disjunction_eq {A} {R S : relation A} x y
+  : clos_refl_trans _ (relation_disjunction R S) x y <->
+      clos_refl_trans _ (relation_disjunction (clos_refl_trans _ R) (clos_refl_trans _ S)) x y.
+Proof.
+  split.
+  - intros.
+    induction H.
+    + destruct H; solve [repeat constructor; assumption].
+    + solve [constructor].
+    + apply (rt_trans _ _ _ _ _ IHclos_refl_trans1 IHclos_refl_trans2).
+  - intros.
+    induction H.
+    + destruct H.
+      * induction H; try solve [repeat constructor; assumption].
+        (* rt_trans case *)
+         eapply rt_trans.
+         apply IHclos_refl_trans1.
+         apply IHclos_refl_trans2.
+      * induction H; try solve [repeat constructor; assumption].
+        (* rt_trans case *)
+        eapply rt_trans.
+        apply IHclos_refl_trans1.
+        apply IHclos_refl_trans2.
+    + apply rt_refl.
+    + eapply rt_trans.
+      apply IHclos_refl_trans1.
+      assumption.
+Qed.
+      
 Theorem commutative_union_theorem {A} (R S : relation A)
         (Rconfluent : confluent R)
         (Sconfluent : confluent S)
         (commute : commute (clos_refl_trans _ R) (clos_refl_trans _ S))
   : confluent (relation_disjunction R S).
+  assert (diamond (relation_disjunction (clos_refl_trans _ R) (clos_refl_trans _ S))) as lemma. {
+    unfold diamond, square.
+    intros.
+    destruct H, H0.
+    - destruct (Rconfluent _ _ _ H H0) as [w [Ryw Rzw]].
+      exists w.
+      split; apply or_introl; assumption.
+    - destruct (commute _ _ _ H H0) as [w [Syw Rzw]].
+      exists w.
+      split; solve [constructor; assumption].
+    - destruct (commute _ _ _ H0 H) as [w [p q]].
+      exists w.
+      split; solve [constructor; assumption].
+    - destruct (Sconfluent _ _ _ H H0) as [w [Ryw Rzw]].
+      exists w.
+      split; apply or_intror; assumption.
+  }
+  apply diamond_property in lemma.
+  clear Rconfluent Sconfluent commute.
   unfold confluent, square in *.
   intros.
-  generalize dependent z.
-  Check clos_refl_trans_ind_left.
-  refine (clos_refl_trans_ind_left A (relation_disjunction R S) x
-                                   (fun y => forall z : A,
-                                        clos_refl_trans A (relation_disjunction R S) x z ->
-                                        exists w : A,
-                                          clos_refl_trans A (relation_disjunction R S) y w /\
-                                            clos_refl_trans A (relation_disjunction R S) z w)
-                                   _ _ y H).
-  - intros.
-    exists z.
-    split.
-    + assumption.
-    + apply rt_refl.
-  - intros.
-    
-c
+  apply closure_disjunction_eq in H, H0.
+  specialize (lemma x y z H H0) as [w [RSyw RSzw]].
+  apply closure_disjunction_eq in RSyw, RSzw.
+  exists w.
+  split; assumption.
+Qed.
+
+(* page 10 (12 pdf page) of FP paper *)
+
+Theorem eta_
+
+Theorem beta_eta_commute : square pare singb (clos_refl_trans _ singb) pare.
+Proof.
+  unfold square.
+  
