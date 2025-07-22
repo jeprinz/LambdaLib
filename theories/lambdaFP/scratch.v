@@ -785,7 +785,7 @@ Proof.
     + subst.
       specialize (IHr2 eq_refl) as [out [p q]].
       exists (pair (pi1 out) (pi2 out)).
-      split; solve [repeat (try constructor; try assumption; try apply pare_lift)].
+      split; solve [repeat (try constructor; try assumption)].
   (* pare_var *)
   - intros.
     remember (var s i) as x.
@@ -803,7 +803,7 @@ Proof.
     + subst.
       specialize (IHr2 eq_refl) as [out [p q]].
       exists (pair (pi1 out) (pi2 out)).
-      split; solve [repeat (try constructor; try assumption; try apply pare_lift)].
+      split; solve [repeat (try constructor; try assumption)].
   (* _ x par_eta *)
   - intros.
     specialize (IHr1 _ r2).
@@ -824,3 +824,239 @@ Proof.
     exists (pair (pi1 out) (pi2 out)).
     split; solve [repeat (try constructor; try assumption; try apply pare_lift)].
 Qed.
+
+(* single step beta without eta and SP *)
+Inductive singb : Term -> Term -> Prop :=
+(* Congruences *)
+| singb_lam : forall s a b, singb a b -> singb (lam s a) (lam s b)
+| singb_app1 : forall a b c, singb a b -> singb (app a c) (app b c)
+| singb_app2 : forall a b c, singb b c -> singb (app a b) (app a c)
+(* Meaningful things *)
+| singb_beta : forall s a b, singb (app (lam s a) b) (subst s 0 b a)
+| singb_pi1 : forall a b, singb (pi1 (pair a b)) a
+| singb_pi2 : forall a b, singb (pi2 (pair a b)) b
+.
+
+Theorem beta_sing_par : forall a b, singb a b -> parb a b.
+Proof.
+  intros.
+  induction H;
+    solve [repeat (try constructor; try assumption; try apply parb_id)].
+Qed.
+
+From Stdlib Require Import Relations.Relation_Definitions.
+From Stdlib Require Import Relations.Relation_Operators.
+From Stdlib Require Import Relations.Operators_Properties.
+
+Check clos_refl_trans.
+Check (clos_refl_trans _ singb).
+
+Search clos_refl_trans.
+
+Theorem beta_1ary_cong : forall a b
+                                (f :  Term -> Term),
+    (forall x y, singb x y -> singb (f x) (f y))
+    -> clos_refl_trans _ singb a b -> clos_refl_trans _ singb (f a) (f b).
+Proof.
+  intros.
+  induction H0.
+  - constructor.
+    apply H.
+    assumption.
+  - solve [constructor].
+  - eapply rt_trans.
+    eassumption.
+    assumption.
+Qed.
+
+Theorem beta_lam_cong : forall s a b,
+    clos_refl_trans _ singb a b -> clos_refl_trans _ singb (lam s a) (lam s b).
+Proof.
+  intros.
+  apply beta_1ary_cong.
+  - intros.
+    constructor.
+    assumption.
+  - assumption.
+Qed.
+
+Theorem beta_2ary_cong : forall a1 a2 b1 b2
+    (f : Term -> Term -> Term),
+    (forall a1 a2 b, singb a1 a2 -> singb (f a1 b) (f a2 b))
+    -> (forall a b1 b2, singb b1 b2 -> singb (f a b1) (f a b2))
+    -> clos_refl_trans _ singb a1 a2
+    -> clos_refl_trans _ singb b1 b2
+    -> clos_refl_trans _ singb (f a1 b1) (f a2 b2).
+Proof.
+  intros.
+  Check rt_trans.
+  apply (rt_trans _ _ _ (f a2 b1) _).
+  - induction H1.
+    + constructor.
+      apply H.
+      assumption.
+    + solve [constructor].
+    + eapply rt_trans.
+      eassumption.
+      assumption.
+  - induction H2.
+    + constructor.
+      apply H0.
+      assumption.
+    + solve [constructor].
+    + eapply rt_trans.
+      eassumption.
+      assumption.
+Qed.
+
+Theorem beta_app_cong : forall a1 a2 b1 b2,
+    clos_refl_trans _ singb a1 a2
+    -> clos_refl_trans _ singb b1 b2
+    -> clos_refl_trans _ singb (app a1 b1) (app a2 b2).
+Proof.
+  intros.
+  apply beta_2ary_cong.
+  - exact singb_app1.
+  - exact singb_app2.
+  - assumption.
+  - assumption.
+Qed.
+
+Theorem beta_par_sing : forall a b, parb a b -> clos_refl_trans _ singb a b.
+Proof.
+  intros.
+  induction H.
+  - apply beta_lam_cong.
+    assumption.
+  - apply beta_app_cong; assumption.
+    
+  - Check (beta_2ary_cong).
+    apply (rt_trans _ _ _ (app (lam s a') b') _).
+    + Check (beta_2ary_cong a a' b b' (fun a b => app (lam s a) b)).
+      refine (beta_2ary_cong a a' b b' (fun a b => app (lam s a) b) _ _ IHparb1 IHparb2);
+         intros; solve [repeat first [constructor | assumption]].
+    + apply rt_step.
+      constructor.
+  - apply (rt_trans _ _ _ (pi1 (pair a' b))).
+    + refine (beta_1ary_cong a a' (fun x => pi1 (pair x b)) _ IHparb).
+      intros.
+      repeat constructor.
+      assumption.
+    + apply rt_step.
+      constructor.
+  - apply (rt_trans _ _ _ (pi2 (pair a b'))).
+    + refine (beta_1ary_cong b b' (fun x => pi2 (pair a x)) _ IHparb).
+      intros.
+      repeat constructor.
+      assumption.
+    + apply rt_step.
+      constructor.
+  - solve [repeat constructor].
+  - solve [repeat constructor].
+Qed.
+
+Check clos_refl_trans.
+Check relation.
+
+(* Partially referenced from "More Church-Rosser Proofs" by Tobias Nipkow *)
+Definition square {A} (R S T U : relation A) : Prop :=
+  forall x y z, R x y -> S x z -> exists w, T y w /\ U z w.
+
+Theorem hindley_rosen {A} (R S : relation A)
+  : square R S (clos_refl_trans _ S) (clos_refl _ R)
+    -> square (clos_refl_trans _ R) (clos_refl_trans _ S) (clos_refl_trans _ S) (clos_refl_trans _ R).
+Proof.
+  unfold square.
+  intros premise x y z Rxy Sxz.
+  generalize dependent z.
+  refine (clos_refl_trans_ind_left A R x
+            (fun (a : A) => forall z, clos_refl_trans _ S x z -> exists w : A,
+                   clos_refl_trans _ S a w /\ clos_refl_trans _ R z w)
+            _ _ y Rxy).
+  (* base R case *)
+  - intros.
+    exists z.
+    split.
+    + assumption.
+    + solve [constructor].
+  (* R step case *)
+  - intros.
+    specialize (H0 z0 H2) as [w [Sy0w Rz0w]].
+    clear Rxy.
+    assert (exists w0 : A, clos_refl_trans A S z w0 /\ clos_refl _ R w w0). {
+      clear H Rz0w H2 z0 x y.
+      generalize dependent z.
+      refine (clos_refl_trans_ind_left A S y0
+                                       (fun (a : A) => forall z, R y0 z -> exists w0 : A,
+                                            clos_refl_trans A S z w0 /\ clos_refl _ R a w0)
+                                       _ _ w Sy0w).
+      (* base S case *)
+      + intros.
+        exists z.
+        split; solve [repeat first [constructor | assumption]].
+      + intros.
+        specialize (H0 _ H2) as [w0 [Sz0w0 Ryw0]].
+        clear H2.
+        inversion Ryw0; clear Ryw0; subst.
+        * specialize (premise _ _ _ H0 H1) as [w2 [Sw0w2 Rzw2]].
+          exists w2.
+          split.
+          -- eapply rt_trans.
+             ++ apply Sz0w0.
+             ++ assumption.
+          -- assumption.
+        * exists z.
+          split.
+          -- eapply rt_trans.
+             apply Sz0w0.
+             apply rt_step.
+             assumption.
+          -- solve [constructor].
+    }
+    destruct H0 as [w0 [Szw0 Rww0]].
+    exists w0.
+    split.
+    + assumption.
+    + eapply rt_trans.
+      * apply Rz0w.
+      * Search clos_refl clos_refl_trans.
+        apply clos_r_clos_rt in Rww0.
+        assumption.
+Qed.
+
+Definition confluent {A} (R : relation A) : Prop :=
+  square (clos_refl_trans _ R) (clos_refl_trans _ R) (clos_refl_trans _ R) (clos_refl_trans _ R).
+
+Definition commute {A} (R S : relation A) : Prop := square R S S R.
+
+(* Next, I need the commutative union theorem.
+ Can I somehow get that frmo Hindley Rosen? *)
+
+
+From Stdlib Require Import Classes.RelationClasses.
+Search (relation _ -> relation _ -> relation _).
+
+Theorem commutative_union_theorem {A} (R S : relation A)
+        (Rconfluent : confluent R)
+        (Sconfluent : confluent S)
+        (commute : commute (clos_refl_trans _ R) (clos_refl_trans _ S))
+  : confluent (relation_disjunction R S).
+  unfold confluent, square in *.
+  intros.
+  generalize dependent z.
+  Check clos_refl_trans_ind_left.
+  refine (clos_refl_trans_ind_left A (relation_disjunction R S) x
+                                   (fun y => forall z : A,
+                                        clos_refl_trans A (relation_disjunction R S) x z ->
+                                        exists w : A,
+                                          clos_refl_trans A (relation_disjunction R S) y w /\
+                                            clos_refl_trans A (relation_disjunction R S) z w)
+                                   _ _ y H).
+  - intros.
+    exists z.
+    split.
+    + assumption.
+    + apply rt_refl.
+  - intros.
+    
+c
