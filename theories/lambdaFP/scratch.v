@@ -323,6 +323,8 @@ Inductive parb : Term -> Term -> Prop :=
 | par_lam : forall s a b, parb a b -> parb (lam s a) (lam s b)
 | par_app : forall {a a' b b'},
     parb a a' -> parb b b' -> parb (app a b) (app a' b')
+| parb_const : forall c, parb (const c) (const c)
+| parb_var : forall s i, parb (var s i) (var s i)
 (* Meaningful things *)
 | par_beta : forall s a a' b b',
     parb a a' -> parb b b' ->
@@ -331,8 +333,14 @@ Inductive parb : Term -> Term -> Prop :=
     parb a a' -> parb (pi1 (pair a b)) a' (* TODO: the input*)
 | par_pi2 : forall a b b',
     parb b b' -> parb (pi2 (pair a b)) b'
-| parb_const : forall c, parb (const c) (const c)
-| parb_var : forall s i, parb (var s i) (var s i).
+| parb_deltapi : forall a b c a' b' c',
+    parb a a' -> parb b b' -> parb c c'
+    -> parb (app (pair a b) c) (pair (app a' c') (app b' c'))
+| parb_pi1lambda : forall s t t',
+    parb t t' -> parb (pi1 (lam s t)) (lam s (pi1 t'))
+| parb_pi2lambda : forall s t t',
+    parb t t' -> parb (pi2 (lam s t)) (lam s (pi2 t'))
+.
 
 Theorem parb_id : forall t, parb t t.
 Proof.
@@ -361,12 +369,17 @@ Proof.
     apply par_app.
     + apply IHparb1.
     + apply IHparb2.
+  (* par_const *)
+  - intros.
+    constructor.
+  (* par_var *)
+  - intros.
+    apply parb_id.
   (* beta *)
   - intros.
     simpl.
     case_nat_comparisons.
-    +
-      rewrite lift_subst.
+    + rewrite lift_subst.
       case_nat_comparisons.
       apply par_beta.
       * apply IHparb1.
@@ -385,12 +398,21 @@ Proof.
   - intros.
     apply par_pi2.
     apply IHparb.
-  (* par_const *)
+  (* deltapi *)
   - intros.
-    constructor.
+    simpl.
+    apply (parb_deltapi _ _ _ _ _ _ (IHparb1 i) (IHparb2 i) (IHparb3 i)).
+  (* pi1lambda *)
   - intros.
-    apply parb_id.
+    simpl.
+    apply parb_pi1lambda.
+    case_nat_comparisons; apply IHparb.
+  (* pi2lambda *)
+  - intros.
+    apply parb_pi2lambda.
+    case_nat_comparisons; apply IHparb.
 Qed.
+  
 (* TODO: The above theorem is almost identical to parb_subst. Can I do something about that? *)
 
 Theorem parb_subst : forall a b c d s i,
@@ -420,6 +442,13 @@ Proof.
       assumption.
     + apply IHparb2.
       assumption.
+  (* par_const *)
+  - intros.
+    constructor.
+  - intros.
+    simpl.
+    case_nat_comparisons; try apply parb_id.
+    + assumption.
   (* beta *)
   - intros.
     simpl.
@@ -451,13 +480,32 @@ Proof.
     apply par_pi2.
     apply IHparb.
     assumption.
-  (* par_const *)
-  - intros.
-    constructor.
+  (* deltapi *)
   - intros.
     simpl.
-    case_nat_comparisons; try apply parb_id.
-    + assumption.
+    apply parb_deltapi.
+    + apply IHparb1.
+      assumption.
+    + apply IHparb2.
+      assumption.
+    + apply IHparb3.
+      assumption.
+  (* pi1lambda *)
+  - intros.
+    simpl.
+    case_nat_comparisons;
+      apply parb_pi1lambda;
+      apply IHparb;
+      apply parb_lift;
+      assumption.
+  (* pi2lambda *)
+  - intros.
+    simpl.
+    case_nat_comparisons;
+      apply parb_pi2lambda;
+      apply IHparb;
+      apply parb_lift;
+      assumption.
 Qed.
 
 Ltac invert_singletons :=
@@ -533,6 +581,42 @@ Proof.
       * apply par_pi2.
         assumption.
       * assumption.
+    (* par_app x parb_deltapi *)
+    + subst.
+      invert_singletons.
+      specialize (IHparb1 _ (par_app (par_app (parb_const pairc) H4) H5)) as [out1 [p1 q12]].
+      invert_singletons.
+      specialize (IHparb2 _ H7) as [out2 [p2 q2]].
+      exists (pair (app b'4 out2) (app b'3 out2)).
+      solve [repeat first [constructor | assumption]].
+    (* par_app x pi1lambda *)
+    + subst.
+      invert_singletons.
+      specialize (IHparb1 _ (parb_const pi1c)) as [out [p1 q1]].
+      invert_singletons.
+      specialize (IHparb2 _ (par_lam _ _ _ H3)) as [out [p1 q1]].
+      invert_singletons.
+      exists (lam s (pi1 b0)).
+      solve [repeat first [constructor | assumption]].
+    (* par_app x pi2lambda *)
+    + subst.
+      invert_singletons.
+      specialize (IHparb1 _ (parb_const pi2c)) as [out [p1 q1]].
+      invert_singletons.
+      specialize (IHparb2 _ (par_lam _ _ _ H3)) as [out [p1 q1]].
+      invert_singletons.
+      exists (lam s (pi2 b0)).
+      solve [repeat first [constructor | assumption]].
+  (* par_const x par_const *)
+  - intros.
+    invert_singletons.
+    exists (const c).
+    split; constructor.
+  (* par_var x par_var *)
+  - intros.
+    invert_singletons.
+    exists (var s i).
+    split; constructor.
   (* par_beta *)
   - intros.
     inversion H1; clear H1; subst.
@@ -581,16 +665,43 @@ Proof.
     + specialize (IHparb _ H4) as [out [p q]].
       exists out.
       split; assumption.
-  (* par_const x par_const *)
+  (* deltapi *)
   - intros.
-    invert_singletons.
-    exists (const c).
-    split; constructor.
-  (* par_var x par_var *)
+    inversion H2; clear H2; subst.
+    (* par_deltapi x par_app *)
+    + invert_singletons.
+      specialize (IHparb1 _ H9) as [out1 [p1 q1]].
+      specialize (IHparb2 _ H8) as [out2 [p2 q2]].
+      specialize (IHparb3 _ H7) as [out3 [p3 q3]].
+      exists (pair (app out1 out3) (app out2 out3)).
+      solve [repeat first [constructor | assumption]].
+    + specialize (IHparb1 _ H6) as [out1 [p1 q1]].
+      specialize (IHparb2 _ H8) as [out2 [p2 q2]].
+      specialize (IHparb3 _ H9) as [out3 [p3 q3]].
+      exists (pair (app out1 out3) (app out2 out3)).
+      solve [repeat first [constructor | assumption]].
+  (* pi1lambda *)
   - intros.
-    invert_singletons.
-    exists (var s i).
-    split; constructor.
+    inversion H0; clear H0; subst.
+    (* par_ pi1lambda x par_app *)
+    + invert_singletons.
+      specialize (IHparb _ H4) as [out [p q]].
+      exists (lam s (pi1 out)).
+      solve [repeat first [constructor | assumption]].
+    + specialize (IHparb _ H4) as [out [p q]].
+      exists (lam s (pi1 out)).
+      solve [repeat first [constructor | assumption]].
+  (* pi2lambda *)
+  - intros.
+    inversion H0; clear H0; subst.
+    (* par_ pi1lambda x par_app *)
+    + invert_singletons.
+      specialize (IHparb _ H4) as [out [p q]].
+      exists (lam s (pi2 out)).
+      solve [repeat first [constructor | assumption]].
+    + specialize (IHparb _ H4) as [out [p q]].
+      exists (lam s (pi2 out)).
+      solve [repeat first [constructor | assumption]].
 Qed.
 
 Inductive pare : Term -> Term -> Prop :=
@@ -830,13 +941,18 @@ Qed.
 Inductive singb : Term -> Term -> Prop :=
 (* Congruences *)
 | singb_lam : forall s a b, singb a b -> singb (lam s a) (lam s b)
-| singb_app1 : forall a b c, singb a b -> singb (app a c) (app b c)
-| singb_app2 : forall a b c, singb b c -> singb (app a b) (app a c)
+| singb_app1 : forall {a b c}, singb a b -> singb (app a c) (app b c)
+| singb_app2 : forall {a b c}, singb b c -> singb (app a b) (app a c)
 (* Meaningful things *)
 | singb_beta : forall s a b, singb (app (lam s a) b) (subst s 0 b a)
 | singb_pi1 : forall a b, singb (pi1 (pair a b)) a
 | singb_pi2 : forall a b, singb (pi2 (pair a b)) b
-.
+| singb_deltapi : forall a b c,
+    singb (app (pair a b) c) (pair (app a c) (app b c))
+| singb_pi1lambda : forall s t,
+    singb (pi1 (lam s t)) (lam s (pi1 t))
+| singb_pi2lambda : forall s t,
+    singb (pi2 (lam s t)) (lam s (pi2 t)).
 
 Theorem beta_sing_par : forall a b, singb a b -> parb a b.
 Proof.
@@ -917,8 +1033,8 @@ Theorem beta_app_cong : forall a1 a2 b1 b2,
 Proof.
   intros.
   apply beta_2ary_cong.
-  - exact singb_app1.
-  - exact singb_app2.
+  - intros. apply singb_app1. assumption.
+  - intros. apply singb_app2. assumption.
   - assumption.
   - assumption.
 Qed.
@@ -927,17 +1043,21 @@ Theorem beta_par_sing : forall a b, parb a b -> clos_refl_trans _ singb a b.
 Proof.
   intros.
   induction H.
+  (* par_app *)
   - apply beta_lam_cong.
     assumption.
+  (* par_lam *)
   - apply beta_app_cong; assumption.
-    
-  - Check (beta_2ary_cong).
-    apply (rt_trans _ _ _ (app (lam s a') b') _).
+  - solve [repeat constructor]. (* par_const *)
+  - solve [repeat constructor]. (* par_var *)
+  (* par_beta *)
+  - apply (rt_trans _ _ _ (app (lam s a') b') _).
     + Check (beta_2ary_cong a a' b b' (fun a b => app (lam s a) b)).
       refine (beta_2ary_cong a a' b b' (fun a b => app (lam s a) b) _ _ IHparb1 IHparb2);
          intros; solve [repeat first [constructor | assumption]].
     + apply rt_step.
       constructor.
+  (* par_pi1 *)
   - apply (rt_trans _ _ _ (pi1 (pair a' b))).
     + refine (beta_1ary_cong a a' (fun x => pi1 (pair x b)) _ IHparb).
       intros.
@@ -945,6 +1065,7 @@ Proof.
       assumption.
     + apply rt_step.
       constructor.
+  (* par_pi2 *)
   - apply (rt_trans _ _ _ (pi2 (pair a b'))).
     + refine (beta_1ary_cong b b' (fun x => pi2 (pair a x)) _ IHparb).
       intros.
@@ -952,8 +1073,52 @@ Proof.
       assumption.
     + apply rt_step.
       constructor.
-  - solve [repeat constructor].
-  - solve [repeat constructor].
+  (* parb_deltapi *)
+  - Check parb_deltapi.
+    eapply rt_trans. apply rt_step. {
+      apply singb_deltapi.
+    }
+    eapply rt_trans. {
+      refine (beta_1ary_cong a a' (fun a => pair (app a c) (app b c)) _ IHparb1).
+      intros.
+      repeat constructor.
+      assumption.
+    }
+    eapply rt_trans. {
+      refine (beta_1ary_cong b b' (fun b => pair (app a' c) (app b c)) _ IHparb2).
+      intros.
+      repeat constructor.
+      assumption.
+    }
+    eapply rt_trans. {
+      refine (beta_1ary_cong c c' (fun x => pair (app a' c) (app b' x)) _ IHparb3).
+      intros.
+      repeat constructor.
+      assumption.
+    }
+    eapply rt_trans. {
+      refine (beta_1ary_cong c c' (fun x => pair (app a' x) (app b' c')) _ IHparb3).
+      intros.
+      repeat constructor.
+      assumption.
+    }
+    apply rt_refl.
+  (* parb_pi1lambda *)
+  - eapply rt_trans. apply rt_step. {
+      apply singb_pi1lambda.
+    }
+    refine (beta_1ary_cong t t' (fun t => lam s (pi1 t)) _ IHparb).
+    intros.
+    repeat constructor.
+    assumption.
+  (* parb_pi12ambda *)
+  -eapply rt_trans. apply rt_step. {
+      apply singb_pi2lambda.
+    }
+    refine (beta_1ary_cong t t' (fun t => lam s (pi2 t)) _ IHparb).
+    intros.
+    repeat constructor.
+    assumption.
 Qed.
 
 Check clos_refl_trans.
