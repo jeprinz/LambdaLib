@@ -218,13 +218,24 @@ Proof.
     case_nat_comparisons; fix_preds; reflexivity.
 Qed.
 
-(* Maybe you can't swap subst and lift in this order in general? *)
+(* You can't swap subst and lift in general. Consider case where s1 != s2. *)
 (*Theorem subst_lift : forall s1 s2 i1 i2 t1 t,
     subst s1 i1 t1 (lift s2 i2 t) =
       if eqb s1 s2
       then _
-      else lift s2 i2 (subst
- *)
+      else lift s2 i2 (subst s2 *)
+
+Ltac simplify_nat_string_eqs :=
+  repeat rewrite ?eqb_eq,
+    ?eqb_neq,
+    ?PeanoNat.Nat.ltb_lt,
+    ?PeanoNat.Nat.ltb_ge,
+    ?PeanoNat.Nat.eqb_eq,
+    ?PeanoNat.Nat.eqb_neq in *;
+  repeat match goal with
+  | H : le ?x 0 |- _ => apply Arith_base.le_n_0_eq_stt in H
+  end;
+  subst.
 
 Theorem subst_lift_off_by_1 : forall s i t1 t,
     subst s (S i) t1 (lift s i t) = subst s i t1 (lift s (S i) t).
@@ -251,18 +262,35 @@ Proof.
     simpl.
     case_nat_comparisons; reflexivity.
 Qed.
-Search le eq.
-Ltac simplify_nat_string_eqs :=
-  repeat rewrite ?eqb_eq,
-    ?eqb_neq,
-    ?PeanoNat.Nat.ltb_lt,
-    ?PeanoNat.Nat.ltb_ge,
-    ?PeanoNat.Nat.eqb_eq,
-    ?PeanoNat.Nat.eqb_neq in *;
-  repeat match goal with
-  | H : le ?x 0 |- _ => apply Arith_base.le_n_0_eq_stt in H
-  end;
-  subst.
+
+Theorem subst_lift_cancel_2 : forall s i t,
+    subst s i (var s i) (lift s (S i) t) = t.
+Proof.
+  intros.
+  generalize dependent s.
+  generalize dependent i.
+  induction t.
+  - intros.
+    simpl.
+    case_nat_comparisons.
+    + apply f_equal.
+      apply IHt.
+    + apply f_equal.
+      apply IHt.
+  - intros.
+    simpl.
+    apply f_equal2.
+    + apply IHt1.
+    + apply IHt2.
+  - intros.
+    simpl.
+    reflexivity.
+  - intros.
+    simpl.
+    case_nat_comparisons;
+      simplify_nat_string_eqs;
+      reflexivity.
+Qed.
     
 Theorem subst_subst : forall s1 s2 i1 i2 t1 t2 t,
     subst s1 i1 t1 (subst s2 i2 t2 t) =
@@ -711,7 +739,7 @@ Inductive pare : Term -> Term -> Prop :=
     pare a a' -> pare b b' -> pare (app a b) (app a' b')
 | pare_const : forall c, pare (const c) (const c)
 | pare_var : forall s i, pare (var s i) (var s i)
-(* Meaningful things *)
+(* Meaningful things *) 
 | par_eta : forall s a b,
     pare a b -> pare a (lam s (app (lift s 0 b) (var s 0)))
 | par_SP : forall a b,
@@ -1282,10 +1310,89 @@ Theorem commutative_union_theorem {A} (R S : relation A)
 Qed.
 
 (* page 10 (12 pdf page) of FP paper *)
-
-Theorem eta_
+(* Lemma 4.5 from paper *)
+Lemma lam_pare_lemma s M N
+      (H : pare (lam s M) N)
+  : (exists P, clos_refl_trans _ singb (app (lift s 0 N) (var s 0)) P /\ pare M P).
+    (* /\
+      (exists Q, clos_refl_trans _ singb (pi1 N) (lam s (pi1 Q))
+                 /\ clos_refl_trans _ singb (pi2 N) (lam s (pi2 Q))
+                 /\ pare M Q).*)
+Proof.
+  remember (lam s M) as x.
+  generalize dependent s.
+  generalize dependent M.
+  induction H;
+    intros s0 M Heqx;
+    inversion Heqx;
+    clear Heqx;
+    subst.
+  - simpl.
+    case_nat_comparisons.
+    exists b.
+    split.
+    + eapply rt_trans. apply rt_step. {
+        apply singb_beta.
+      }
+      rewrite subst_lift_cancel_2.
+      apply rt_refl.
+    + assumption.
+  - specialize (IHpare _ _ eq_refl) as [P [betastep etastep]].
+    exists P.
+    split.
+    + simpl.
+      case_nat_comparisons.
+      * eapply rt_trans. apply rt_step. {
+          apply singb_beta.
+        }
+        simpl.
+        case_nat_comparisons.
+        simplify_nat_string_eqs.
+        rewrite subst_lift_cancel_2.
+        assumption.
+      * eapply rt_trans. apply rt_step. {
+          apply singb_beta.
+        }
+        simpl.
+        case_nat_comparisons.
+        simplify_nat_string_eqs.
+        rewrite lift_lift.
+        case_nat_comparisons.
+        rewrite subst_lift.
+        assumption.
+    + assumption.
+  (* The lemma in the paper has another part to the conclusion - I think that it is necessary to do them
+   both at once for the induction to actually go through! *)
+  - specialize (IHpare _ _ eq_refl) as [P [betastep etastep]].
+    exists (pair (pi1 P) (pi2 P)).
+    split.
+    + simpl.
+      eapply rt_trans. apply rt_step. {
+        apply singb_deltapi.
+      }
+      fold (pi1 (lift M 0 b)).
+      fold (pi2 (lift M 0 b)).
+Abort.
 
 Theorem beta_eta_commute : square pare singb (clos_refl_trans _ singb) pare.
 Proof.
   unfold square.
-  
+  intros.
+  generalize dependent y.
+  induction H0.
+  (* singb_lam *)
+  - intros.
+    remember (lam s a) as x.
+    induction H;
+      inversion Heqx; clear Heqx; subst.
+    (* singb_lam x pare_lam *)
+    + specialize (IHsingb _ H) as [w [beta_b0w eta_bw]].
+      exists (lam s w).
+      split.
+      * apply beta_lam_cong.
+        assumption.
+      * apply pare_lam.
+        assumption.
+    (* singb_lam x pare_eta *)
+    + specialize (IHpare eq_refl) as [out [p q]].
+      
