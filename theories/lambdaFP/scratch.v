@@ -1025,6 +1025,28 @@ Proof.
   - assumption.
 Qed.
 
+Theorem beta_pi1_cong : forall a b,
+    clos_refl_trans _ singb a b -> clos_refl_trans _ singb (pi1 a) (pi1 b).
+Proof.
+  intros.
+  apply beta_1ary_cong.
+  - intros.
+    constructor.
+    assumption.
+  - assumption.
+Qed.
+
+Theorem beta_pi2_cong : forall a b,
+    clos_refl_trans _ singb a b -> clos_refl_trans _ singb (pi2 a) (pi2 b).
+Proof.
+  intros.
+  apply beta_1ary_cong.
+  - intros.
+    constructor.
+    assumption.
+  - assumption.
+Qed.
+
 Theorem beta_2ary_cong : forall a1 a2 b1 b2
     (f : Term -> Term -> Term),
     (forall a1 a2 b, singb a1 a2 -> singb (f a1 b) (f a2 b))
@@ -1313,65 +1335,86 @@ Qed.
 (* Lemma 4.5 from paper *)
 Lemma lam_pare_lemma s M N
       (H : pare (lam s M) N)
-  : (exists P, clos_refl_trans _ singb (app (lift s 0 N) (var s 0)) P /\ pare M P).
-    (* /\
+  : (exists P, clos_refl_trans _ singb (app (lift s 0 N) (var s 0)) P /\ pare M P)
+    /\
       (exists Q, clos_refl_trans _ singb (pi1 N) (lam s (pi1 Q))
                  /\ clos_refl_trans _ singb (pi2 N) (lam s (pi2 Q))
-                 /\ pare M Q).*)
+                 /\ pare M Q).
 Proof.
   remember (lam s M) as x.
   generalize dependent s.
   generalize dependent M.
   induction H;
-    intros s0 M Heqx;
+    intros M s0 Heqx;
     inversion Heqx;
     clear Heqx;
     subst.
   - simpl.
     case_nat_comparisons.
-    exists b.
     split.
-    + eapply rt_trans. apply rt_step. {
-        apply singb_beta.
-      }
-      rewrite subst_lift_cancel_2.
-      apply rt_refl.
-    + assumption.
-  - specialize (IHpare _ _ eq_refl) as [P [betastep etastep]].
-    exists P.
-    split.
-    + simpl.
-      case_nat_comparisons.
+    + exists b.
+      split.
       * eapply rt_trans. apply rt_step. {
           apply singb_beta.
         }
-        simpl.
-        case_nat_comparisons.
-        simplify_nat_string_eqs.
         rewrite subst_lift_cancel_2.
-        assumption.
-      * eapply rt_trans. apply rt_step. {
-          apply singb_beta.
-        }
-        simpl.
+        apply rt_refl.
+      * assumption.
+    + exists b.
+      split; [|split].
+      * eapply rt_trans. apply rt_step. {apply singb_pi1lambda.}.
+        apply rt_refl.
+      * eapply rt_trans. apply rt_step. {apply singb_pi2lambda.}.
+        apply rt_refl.
+      * assumption.
+  - specialize (IHpare _ _ eq_refl) as [[P [betastep etastep]] thingy].
+    split.
+    + exists P.
+      split.
+      * simpl.
         case_nat_comparisons.
-        simplify_nat_string_eqs.
-        rewrite lift_lift.
-        case_nat_comparisons.
-        rewrite subst_lift.
-        assumption.
-    + assumption.
+        -- eapply rt_trans. apply rt_step. {
+             apply singb_beta.
+           }
+           simpl.
+           case_nat_comparisons.
+           simplify_nat_string_eqs.
+           rewrite subst_lift_cancel_2.
+           assumption.
+        -- eapply rt_trans. apply rt_step. {
+             apply singb_beta.
+           }
+           simpl.
+           case_nat_comparisons.
+           simplify_nat_string_eqs.
+           rewrite lift_lift.
+           case_nat_comparisons.
+           rewrite subst_lift.
+           assumption.
+      * assumption.
+    + exists P.
+      split; [|split].
+      * eapply rt_trans. apply rt_step. {apply singb_pi1lambda.}.
+        (* When you do an eta expansion, it can change the name on the lambda.
+         If I'm going to have this variable representation, do I need to have lambda renaming be a
+         beta step? Or should equality be up to lambda renaming?
+         Or can I change the theorem statement to account for it? *)
+        (*apply beta_lam_cong.*)
+        give_up.
+      * give_up.
+      * assumption.
   (* The lemma in the paper has another part to the conclusion - I think that it is necessary to do them
    both at once for the induction to actually go through! *)
-  - specialize (IHpare _ _ eq_refl) as [P [betastep etastep]].
-    exists (pair (pi1 P) (pi2 P)).
+  - specialize (IHpare _ _ eq_refl) as [[P [betastep etastep]] thingy].
     split.
-    + simpl.
-      eapply rt_trans. apply rt_step. {
-        apply singb_deltapi.
-      }
-      fold (pi1 (lift M 0 b)).
-      fold (pi2 (lift M 0 b)).
+    + exists (pair (pi1 P) (pi2 P)).
+      split.
+      * simpl.
+        eapply rt_trans. apply rt_step. {
+          apply singb_deltapi.
+        }
+        fold (pi1 (lift M 0 b)).
+        fold (pi2 (lift M 0 b)).
 Abort.
 
 Theorem beta_eta_commute : square pare singb (clos_refl_trans _ singb) pare.
