@@ -2,8 +2,12 @@ Require Import String.
 Require Import Lia.
 
 (*
-One idea is that I could implement lambdaFP from scratch without autosubst.
-I'm going to at least consider it in this file.
+This is a formalization of the system from
+
+"Extending the Extensional Lambda Calculus with Surjective Pairing is Conservative"
+by Kristian Støvring
+
+https://www.brics.dk/RS/06/5/BRICS-RS-06-5.pdf
  *)
 
 Inductive Constant :=
@@ -46,6 +50,11 @@ Fixpoint subst : string -> nat -> Term -> Term -> Term :=
     | const c => const c
     end.
 
+(*
+because i've defined lift and subst using natural number operations and boolean equality,
+i need these tactics that automate simplifying these expressions and equalities
+*)
+
 Ltac rewrite_by_lia H :=
   let eq := fresh "eq" in
   assert H as eq; [
@@ -67,7 +76,61 @@ Ltac prove_by_lia H :=
       ?PeanoNat.Nat.eqb_neq in *;
       lia
     |].
-      
+
+
+Ltac contradiction_by_lia :=
+  exfalso;
+  repeat rewrite
+         ?PeanoNat.Nat.ltb_lt,
+    ?PeanoNat.Nat.ltb_ge,
+    ?PeanoNat.Nat.eqb_eq,
+    ?PeanoNat.Nat.eqb_neq in *;
+  lia.
+
+Ltac contradiction_by_string_equality :=
+  exfalso;
+  repeat rewrite ?eqb_eq, ?eqb_neq in *;
+  subst;
+  contradiction.
+
+Ltac case_nat_comparisons :=
+  let Hnew := fresh "Hnew" in
+  try (
+      match goal with
+      | H : Nat.ltb ?x ?y = ?b |- _ => rewrite H
+      | H : eqb ?x ?y = ?b |- _ => rewrite H
+      | H : Nat.eqb ?x ?y = ?b |- _ => rewrite H
+      | |- context [Nat.ltb ?x ?y] => destruct (Nat.ltb x y) eqn: Hnew
+      | |- context [eqb ?x ?y] => destruct (eqb x y) eqn: Hnew
+      | |- context [Nat.eqb ?x ?y] => destruct (Nat.eqb x y) eqn: Hnew
+      end;
+      try contradiction_by_lia;
+      try contradiction_by_string_equality;
+      simpl; case_nat_comparisons
+    ).
+
+Ltac fix_preds :=
+  repeat match goal with
+    | |- context [S (Nat.pred ?x)] =>
+        rewrite_by_lia (S (Nat.pred x) = x)
+         end.
+
+
+Ltac simplify_nat_string_eqs :=
+  repeat rewrite ?eqb_eq,
+    ?eqb_neq,
+    ?PeanoNat.Nat.ltb_lt,
+    ?PeanoNat.Nat.ltb_ge,
+    ?PeanoNat.Nat.eqb_eq,
+    ?PeanoNat.Nat.eqb_neq in *;
+  repeat match goal with
+  | H : le ?x 0 |- _ => apply Arith_base.le_n_0_eq_stt in H
+  end;
+  subst.
+
+
+(* now, a big pile of facts about substitution and lifting *)
+
 Theorem subst_lift : forall s i t1 t2, subst s i t1 (lift s i t2) = t2.
 Proof.
   intros.
@@ -115,45 +178,6 @@ Proof.
       rewrite H1.
       reflexivity.
 Qed.
-
-
-Ltac contradiction_by_lia :=
-  exfalso;
-  repeat rewrite
-         ?PeanoNat.Nat.ltb_lt,
-    ?PeanoNat.Nat.ltb_ge,
-    ?PeanoNat.Nat.eqb_eq,
-    ?PeanoNat.Nat.eqb_neq in *;
-  lia.
-
-Ltac contradiction_by_string_equality :=
-  exfalso;
-  repeat rewrite ?eqb_eq, ?eqb_neq in *;
-  subst;
-  contradiction.
-
-Ltac case_nat_comparisons :=
-  let Hnew := fresh "Hnew" in
-  try (
-      match goal with
-      | H : Nat.ltb ?x ?y = ?b |- _ => rewrite H
-      | H : eqb ?x ?y = ?b |- _ => rewrite H
-      | H : Nat.eqb ?x ?y = ?b |- _ => rewrite H
-      | |- context [Nat.ltb ?x ?y] => destruct (Nat.ltb x y) eqn: Hnew
-      | |- context [eqb ?x ?y] => destruct (eqb x y) eqn: Hnew
-      | |- context [Nat.eqb ?x ?y] => destruct (Nat.eqb x y) eqn: Hnew
-      end;
-      try contradiction_by_lia;
-      try contradiction_by_string_equality;
-      simpl; case_nat_comparisons
-    ).
-
-Ltac fix_preds :=
-  repeat match goal with
-    | |- context [S (Nat.pred ?x)] =>
-        rewrite_by_lia (S (Nat.pred x) = x)
-    end.
-
 
 Theorem lift_lift : forall s1 s2 i1 i2 t,
     lift s1 i1 (lift s2 i2 t) =
@@ -225,17 +249,6 @@ Qed.
       then _
       else lift s2 i2 (subst s2 *)
 
-Ltac simplify_nat_string_eqs :=
-  repeat rewrite ?eqb_eq,
-    ?eqb_neq,
-    ?PeanoNat.Nat.ltb_lt,
-    ?PeanoNat.Nat.ltb_ge,
-    ?PeanoNat.Nat.eqb_eq,
-    ?PeanoNat.Nat.eqb_neq in *;
-  repeat match goal with
-  | H : le ?x 0 |- _ => apply Arith_base.le_n_0_eq_stt in H
-  end;
-  subst.
 
 Theorem subst_lift_off_by_1 : forall s i t1 t,
     subst s (S i) t1 (lift s i t) = subst s i t1 (lift s (S i) t).
@@ -327,11 +340,14 @@ Proof.
     Time case_nat_comparisons; try reflexivity; try (rewrite subst_lift; reflexivity).
 Qed.
 
+(* ok, now on to the actual confluence proof. *)
+
 Definition pair t1 t2 := (app (app (const pairc) t1) t2).
 Definition pi1 t := app (const pi1c) t.
 Definition pi2 t := app (const pi2c) t.
 Definition constant (t : string) : Term := const (constc t).
 
+(* single step reduction *)
 Inductive red : Term -> Term -> Prop :=
 (* Congruences *)
 | red_lam : forall s a b, red a b -> red (lam s a) (lam s b)
@@ -345,7 +361,7 @@ Inductive red : Term -> Term -> Prop :=
 | red_SP : forall t, red t (pair (pi1 t) (pi2 t))
 .
 
-(* TODO: I forgot the commutation rules! *)
+(* parallel "extensionality-free" reduction, this is =>R from Støvring. *)
 Inductive parb : Term -> Term -> Prop :=
 (* Congruences *)
 | par_lam : forall s a b, parb a b -> parb (lam s a) (lam s b)
@@ -732,6 +748,8 @@ Proof.
       solve [repeat first [constructor | assumption]].
 Qed.
 
+(* having proven confluence of parallel beta, now this is
+   a definition of parallel eta. this is =>E from Støvring *)
 Inductive pare : Term -> Term -> Prop :=
 (* Congruences *)
 | pare_lam : forall s a b, pare a b -> pare (lam s a) (lam s b)
@@ -1000,13 +1018,12 @@ Search clos_refl_trans.
 
 Theorem beta_1ary_cong : forall a b
                                 (f :  Term -> Term),
-    (forall x y, singb x y -> singb (f x) (f y))
+    (forall x y, singb x y -> clos_refl_trans _ singb (f x) (f y))
     -> clos_refl_trans _ singb a b -> clos_refl_trans _ singb (f a) (f b).
 Proof.
   intros.
   induction H0.
-  - constructor.
-    apply H.
+  - apply H.
     assumption.
   - solve [constructor].
   - eapply rt_trans.
@@ -1020,6 +1037,7 @@ Proof.
   intros.
   apply beta_1ary_cong.
   - intros.
+    apply rt_step.
     constructor.
     assumption.
   - assumption.
@@ -1031,6 +1049,7 @@ Proof.
   intros.
   apply beta_1ary_cong.
   - intros.
+    apply rt_step.
     constructor.
     assumption.
   - assumption.
@@ -1042,10 +1061,12 @@ Proof.
   intros.
   apply beta_1ary_cong.
   - intros.
+    apply rt_step.
     constructor.
     assumption.
   - assumption.
 Qed.
+
 
 Theorem beta_2ary_cong : forall a1 a2 b1 b2
     (f : Term -> Term -> Term),
@@ -1085,6 +1106,23 @@ Proof.
   apply beta_2ary_cong.
   - intros. apply singb_app1. assumption.
   - intros. apply singb_app2. assumption.
+  - assumption.
+  - assumption.
+Qed.
+
+Theorem beta_pair_cong : forall a1 a2 b1 b2,
+    clos_refl_trans _ singb a1 a2
+    -> clos_refl_trans _ singb b1 b2
+    -> clos_refl_trans _ singb (pair a1 b1) (pair a2 b2).
+Proof.
+  intros.
+  apply beta_2ary_cong.
+  - intros. unfold pair.
+    apply (fun x => singb_app1 (singb_app2 x)).
+    assumption.
+  - intros.
+    unfold pair.
+    apply singb_app2. assumption.
   - assumption.
   - assumption.
 Qed.
@@ -1171,8 +1209,19 @@ Proof.
     assumption.
 Qed.
 
-Check clos_refl_trans.
-Check relation.
+Theorem beta_lift_cong : forall t1 t2 s i,
+    clos_refl_trans _ singb t1 t2
+    -> clos_refl_trans _ singb (lift s i t1) (lift s i t2).
+Proof.
+  intros.
+  apply beta_1ary_cong.
+  - intros.
+    apply beta_par_sing.
+    apply parb_lift.
+    apply beta_sing_par.
+    assumption.
+  - assumption.
+Qed.
 
 (* Partially referenced from "More Church-Rosser Proofs" by Tobias Nipkow *)
 Definition square {A} (R S T U : relation A) : Prop :=
@@ -1349,6 +1398,7 @@ Proof.
     inversion Heqx;
     clear Heqx;
     subst.
+  (* pare_lam case *)
   - simpl.
     case_nat_comparisons.
     split.
@@ -1362,11 +1412,12 @@ Proof.
       * assumption.
     + exists b.
       split; [|split].
-      * eapply rt_trans. apply rt_step. {apply singb_pi1lambda.}.
+      * eapply rt_trans. apply rt_step. {apply singb_pi1lambda. }.
         apply rt_refl.
       * eapply rt_trans. apply rt_step. {apply singb_pi2lambda.}.
         apply rt_refl.
       * assumption.
+  (* pare_eta case *)
   - specialize (IHpare _ _ eq_refl) as [[P [betastep etastep]] thingy].
     split.
     + exists P.
@@ -1403,18 +1454,56 @@ Proof.
         give_up.
       * give_up.
       * assumption.
-  (* The lemma in the paper has another part to the conclusion - I think that it is necessary to do them
-   both at once for the induction to actually go through! *)
-  - specialize (IHpare _ _ eq_refl) as [[P [betastep etastep]] thingy].
+  (* par_SP case *)
+  - Print pare.
+    specialize (IHpare _ _ eq_refl) as [[P [betastep etastep]] [Q [Qfact1 [Qfact2 Qfact3]]]].
     split.
-    + exists (pair (pi1 P) (pi2 P)).
+    Print par_SP.
+    + exists (pair (pi1 Q) (pi2 Q)).
       split.
-      * simpl.
+      * 
+        simpl.
         eapply rt_trans. apply rt_step. {
           apply singb_deltapi.
         }
-        fold (pi1 (lift M 0 b)).
-        fold (pi2 (lift M 0 b)).
+        (*Compute (lift s0 0 (pi1 b)).*)
+        fold (pi1 (lift s0 0 b)).
+        replace (pi1 (lift s0 0 b)) with (lift s0 0 (pi1 b)) by reflexivity.
+        fold (pi2 (lift s0 0 b)).
+        replace (pi2 (lift s0 0 b)) with (lift s0 0 (pi2 b)) by reflexivity.
+        apply beta_pair_cong.
+        -- eapply rt_trans.
+           apply (beta_app_cong _ _ _ _ (beta_lift_cong _ _ _ _ Qfact1) (rt_refl _ _ _)).
+           eapply rt_trans.
+           apply rt_step.
+           simpl.
+           case_nat_comparisons.
+           apply singb_beta.
+           simpl.
+           rewrite subst_lift_cancel_2.
+           apply rt_refl.
+        -- eapply rt_trans.
+           apply (beta_app_cong _ _ _ _ (beta_lift_cong _ _ _ _ Qfact2) (rt_refl _ _ _)).
+           simpl.
+           case_nat_comparisons.
+           eapply rt_trans.
+           apply rt_step.
+           apply singb_beta.
+           simpl.
+           rewrite subst_lift_cancel_2.
+           apply rt_refl.
+      * apply (par_SP _ _ Qfact3).
+    + exists Q.
+      split; [|split].
+      * eapply rt_trans.
+        apply rt_step.
+        apply singb_pi1.
+        assumption.
+      * eapply rt_trans.
+        apply rt_step.
+        apply singb_pi2.
+        assumption.
+      * assumption.
 Abort.
 
 Theorem beta_eta_commute : square pare singb (clos_refl_trans _ singb) pare.

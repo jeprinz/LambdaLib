@@ -5,6 +5,9 @@ Require Import lambdaSolve.
 Require Import FunctionalExtensionality.
 Require Import Coq.Logic.PropExtensionality.
 
+
+
+
 (* Contexts *)
 Definition nil := <Nil>.
 Definition cons := <fun ctx => fun lvl => fun ty => Cons ctx lvl ty>.
