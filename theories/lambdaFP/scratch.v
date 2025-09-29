@@ -242,6 +242,18 @@ Proof.
     case_nat_comparisons; fix_preds; reflexivity.
 Qed.
 
+Theorem subst_lift_different_names : forall s1 s2 t1 t2 i1 i2,
+    s1 <> s2
+    -> subst s1 i1 (lift s2 i2 t1) (lift s2 i2 t2) = lift s2 i2 (subst s1 i1 t1 t2).
+Proof.
+  intros.
+  rewrite lift_subst.
+  case_nat_comparisons.
+  - reflexivity.
+  - reflexivity.
+Qed.
+
+
 (* You can't swap subst and lift in general. Consider case where s1 != s2. *)
 (*Theorem subst_lift : forall s1 s2 i1 i2 t1 t,
     subst s1 i1 t1 (lift s2 i2 t) =
@@ -347,6 +359,7 @@ Definition pi1 t := app (const pi1c) t.
 Definition pi2 t := app (const pi2c) t.
 Definition constant (t : string) : Term := const (constc t).
 
+(*
 (* single step reduction *)
 Inductive red : Term -> Term -> Prop :=
 (* Congruences *)
@@ -360,6 +373,7 @@ Inductive red : Term -> Term -> Prop :=
 | red_eta : forall s t, red t (lam s (lift s 0 t))
 | red_SP : forall t, red t (pair (pi1 t) (pi2 t))
 .
+*)
 
 (* parallel "extensionality-free" reduction, this is =>R from Støvring. *)
 Inductive parb : Term -> Term -> Prop :=
@@ -370,6 +384,9 @@ Inductive parb : Term -> Term -> Prop :=
 | parb_const : forall c, parb (const c) (const c)
 | parb_var : forall s i, parb (var s i) (var s i)
 (* Meaningful things *)
+| par_alpha : forall s1 s2 t1 t2,
+    parb t1 t2
+    -> parb (lam s1 t1) (lam s2 (subst s1 0 (var s2 0) (lift s2 0 t2)))
 | par_beta : forall s a a' b b',
     parb a a' -> parb b b' ->
     parb (app (lam s a) b) (subst s 0 b' a')
@@ -419,6 +436,35 @@ Proof.
   (* par_var *)
   - intros.
     apply parb_id.
+  (* alpha *) (* seems like i could simplify this proof *)
+  - intros.
+    simpl.
+    case_nat_comparisons;
+    simplify_nat_string_eqs.
+    + rewrite subst_lift.
+      apply par_lam.
+      apply IHparb.
+    + rewrite lift_subst.
+      case_nat_comparisons;
+        simplify_nat_string_eqs;
+        rewrite lift_lift;
+        case_nat_comparisons;
+        apply par_alpha;
+        apply IHparb.
+    + rewrite lift_subst.
+      case_nat_comparisons.
+      simplify_nat_string_eqs.
+      rewrite lift_lift.
+      case_nat_comparisons.
+      apply par_alpha.
+      apply IHparb.
+    + rewrite lift_subst.
+      case_nat_comparisons;
+        simplify_nat_string_eqs;
+        rewrite lift_lift;
+        case_nat_comparisons;
+        apply par_alpha;
+        apply IHparb.
   (* beta *)
   - intros.
     simpl.
@@ -493,6 +539,74 @@ Proof.
     simpl.
     case_nat_comparisons; try apply parb_id.
     + assumption.
+  (* alpha *)
+  - intros.
+    simpl.
+    case_nat_comparisons;
+    simplify_nat_string_eqs.
+    + rewrite subst_lift.
+      apply par_lam.
+      apply IHparb.
+      apply parb_lift.
+      assumption.
+    + Check par_alpha.
+      rewrite subst_subst.
+      case_nat_comparisons.
+      rewrite lift_lift.
+      case_nat_comparisons.
+      Check par_alpha.
+      rewrite subst_lift_different_names; auto.
+      apply par_alpha.
+      apply IHparb.
+      apply parb_lift.
+      assumption.
+    +
+
+      rewrite subst_subst.
+      case_nat_comparisons.
+      simplify_nat_string_eqs.
+      Check par_alpha.
+      replace (subst s (S i) (lift s1 0 (lift s 0 c)) (lift s 0 t2)) with
+        (lift s 0 (subst s i (lift s1 0 c) t2)).
+      2: {
+        rewrite lift_subst.
+        case_nat_comparisons.
+        - rewrite lift_lift.
+          case_nat_comparisons.
+          reflexivity.
+        - Print simplify_nat_string_eqs.
+          Search Nat.ltb lt.
+          rewrite PeanoNat.Nat.ltb_nlt in Hnew3.
+          Search not lt ge.
+          apply Compare_dec.not_lt in Hnew3.
+          inversion Hnew3.
+          rewrite subst_lift_off_by_1.
+          rewrite lift_lift.
+          case_nat_comparisons.
+          reflexivity.
+      }
+      apply par_alpha.
+      apply IHparb.
+      apply parb_lift.
+      assumption.
+    + rewrite subst_subst.
+      case_nat_comparisons.
+      Check par_alpha.
+      rewrite lift_lift.
+      case_nat_comparisons.
+      * simplify_nat_string_eqs.
+        rewrite lift_lift.
+        case_nat_comparisons.
+        rewrite subst_lift_different_names; auto.
+        apply par_alpha.
+        apply IHparb.
+        apply parb_lift.
+        assumption.
+      * rewrite subst_lift_different_names; auto.
+        apply par_alpha.
+        apply IHparb.
+        apply parb_lift.
+        assumption.
   (* beta *)
   - intros.
     simpl.
@@ -581,6 +695,8 @@ Proof.
       apply H1.
       * apply par_lam.
         apply H2.
+  (* par_lam x par_alpha *)
+    + give_up.
   (* par_app *)
   - intros.
     inversion H1.
@@ -604,6 +720,7 @@ Proof.
         assumption.
       * Check parb_subst.
         apply parb_subst; assumption.
+      * (* ? ? ? what case is this ? *)
     (* par_app x par_pi1 *)
     + subst.
       invert_singletons.
@@ -990,6 +1107,8 @@ Inductive singb : Term -> Term -> Prop :=
 | singb_app1 : forall {a b c}, singb a b -> singb (app a c) (app b c)
 | singb_app2 : forall {a b c}, singb b c -> singb (app a b) (app a c)
 (* Meaningful things *)
+| singb_alpha : forall s1 s2 t,
+    -> singb (lam s1 t) (lam s2 (subst s1 0 (var s2 0) t))
 | singb_beta : forall s a b, singb (app (lam s a) b) (subst s 0 b a)
 | singb_pi1 : forall a b, singb (pi1 (pair a b)) a
 | singb_pi2 : forall a b, singb (pi2 (pair a b)) b
