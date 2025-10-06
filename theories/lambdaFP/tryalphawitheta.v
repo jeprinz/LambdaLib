@@ -1163,10 +1163,56 @@ Proof.
       specialize (IHr1 _ r2) as [d [t2d t3d]].
       exists (lam s1 d).
       split.
-      * Check par_alpha.
-        Check (cast (par_alpha s2 s1 (subst s1 0 (var s2 0) (lift s2 0 t2)) d)).
-        
-      give_up.
+      * assert (thing := par_alpha s2 s1 (subst s1 0 (var s2 0) (lift s2 0 t2))
+                         (subst s1 0 (var s2 0) (lift s2 0 d))).
+        assert (pare (subst s1 0 (var s2 0) (lift s2 0 t2)) (subst s1 0 (var s2 0) (lift s2 0 d))). {
+          apply pare_subst; try constructor.
+          apply pare_lift.
+          assumption.
+        }
+        apply thing in H.
+        clear thing.
+        assert (subst s2 0 (var s1 0) (lift s1 0 (subst s1 0 (var s2 0) (lift s2 0 d))) = d). {
+          destruct (string_dec s1 s2).
+          - subst s2.
+            repeat rewrite subst_lift.
+            reflexivity.
+          - rewrite lift_subst.
+            case_nat_comparisons.
+            rewrite subst_subst.
+            case_nat_comparisons.
+            rewrite lift_lift.
+            case_nat_comparisons.
+            rewrite subst_lift.
+            apply subst_lift_cancel_2.
+        }
+        rewrite H0 in H.
+        assumption.
+      * assert (thing := par_alpha s3 s1 (subst s1 0 (var s3 0) (lift s3 0 t3))
+                         (subst s1 0 (var s3 0) (lift s3 0 d))).
+        assert (pare (subst s1 0 (var s3 0) (lift s3 0 t3)) (subst s1 0 (var s3 0) (lift s3 0 d))). {
+          apply pare_subst; try constructor.
+          apply pare_lift.
+          assumption.
+        }
+        apply thing in H.
+        clear thing.
+        assert (subst s3 0 (var s1 0) (lift s1 0 (subst s1 0 (var s3 0) (lift s3 0 d))) = d). {
+          destruct (string_dec s1 s3).
+          - subst s3.
+            repeat rewrite subst_lift.
+            reflexivity.
+          - rewrite lift_subst.
+            case_nat_comparisons.
+            rewrite subst_subst.
+            case_nat_comparisons.
+            rewrite lift_lift.
+            case_nat_comparisons.
+            rewrite subst_lift.
+            apply subst_lift_cancel_2.
+        }
+        rewrite H0 in H.
+        assumption.
     (* par_eta x par_alpha *)
     + intros.
       remember (lam s2 (subst s1 0 (var s2 0) (lift s2 0 t2))) as x.
@@ -1645,6 +1691,8 @@ Proof.
       * eapply rt_trans. apply rt_step. {apply singb_pi2lambda.}.
         apply rt_refl.
       * assumption.
+  (* par_alpha case *)
+  - give_up.
   (* pare_eta case *)
   - specialize (IHpare _ _ eq_refl) as [[P [betastep etastep]] thingy].
     split.
