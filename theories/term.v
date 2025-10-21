@@ -10,35 +10,25 @@ implemented in autosubst, so I can deal with actually proving that this works th
 Also keep in mind that when I go to define e.g. app over the quotiented terms, I will need to
 prove "forall a b c d : A, R a b -> R c d -> R (app a c) (app b d)",
 so it is better to build the congruence rules into the relation like this.
-*)
+ *)
 
-Inductive Constant :=
-| pi1c : Constant
-| pi2c : Constant
-| pairc : Constant
-| anyc : string -> Constant.
+Inductive Const : Type :=
+| sconst : string -> Const
+| nconst : nat -> Const.
 
 Inductive Term : Type :=
 | lam : string -> Term -> Term
 | app : Term -> Term -> Term
-| const : Constant -> Term
+| const : Const -> Term
 | var : string -> nat -> Term (*nth variable with that name, going up like debruin indices*)
 | lift : string -> nat -> Term -> Term
 (* the var info, the term being subbed for the var, the term being subbed into *)
 | subst : string -> nat -> Term -> Term -> Term.
 
-Definition pair t1 t2 := (app (app (const pairc) t1) t2).
-Definition pi1 t := app (const pi1c) t.
-Definition pi2 t := app (const pi2c) t.
-Definition constant (t : string) : Term := const (anyc t).
-
 Inductive convertible : Term -> Term -> Prop :=
 | alpha : forall s1 s2 t, convertible (lam s1 t) (lam s2 (subst s1 0 (var s2 0) (lift s2 0 t)))
 | beta : forall {s t1 t2}, convertible (app (lam s t1) t2) (subst s 0 t2 t1)
-| betapi1 : forall {t1 t2}, convertible (pi1 (pair t1 t2)) t1
-| betapi2 : forall {t1 t2}, convertible (pi2 (pair t1 t2)) t2
 | eta : forall {s t}, convertible t (lam s (app (lift s 0 t) (var s 0)))
-| SP : forall {t}, convertible t (pair (pi1 t) (pi2 t))
 (* congruence convertibles *)
 | lam_cong : forall s t t', convertible t t' -> convertible (lam s t) (lam s t')
 | app_cong : forall t1 t1' t2 t2',
@@ -94,49 +84,19 @@ lift TAKE an index? Check Nipkow paper. *)
 (* lift_lift ???*)                                           
 .
 
-Theorem pi1_cong : forall t t', convertible t t' -> convertible (pi1 t) (pi1 t').
-Proof.
-  intros.
-  apply app_cong.
-  apply conv_refl.
-  apply H.
-Qed.
-
-Theorem pi2_cong : forall t t', convertible t t' -> convertible (pi2 t) (pi2 t').
-Proof.
-  intros.
-  apply app_cong.
-  apply conv_refl.
-  apply H.
-Qed.
-
-Theorem pair_cong : forall t1 t1' t2 t2',
-    convertible t1 t1' -> convertible t2 t2' -> convertible (pair t1 t2) (pair t1' t2').
-Proof.
-  intros.
-  apply app_cong.
-  apply app_cong.
-  apply conv_refl.
-  apply H.
-  apply H0.
-Qed.
-
 (*
-For now, consistency will be an axiom. Eventually I will prove it by mapping this whole system
-into lambda-FP, following Støvring.
+For now, consistency will be an axiom.
 *)
 
 (* I could potentially get rid of the need for this if I used variables instead of constants? *)
-Axiom constInj : forall (t1 t2 : string), convertible (const (anyc t1)) (const (anyc t2)) -> t1 = t2.
+Axiom constInj : forall (t1 t2 : Const), convertible (const t1) (const t2) -> t1 = t2.
 
 Theorem consistency : exists t1 t2, not (convertible t1 t2).
 Proof.
-  exists (const (anyc "a")).
-  exists (const (anyc "b")).
+  exists (const (sconst "a")).
+  exists (const (sconst "b")).
   intro c.
   apply constInj in c.
-  apply eqb_eq in c.
-  simpl in c.
   inversion c.
 Qed.
 

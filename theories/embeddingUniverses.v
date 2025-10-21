@@ -5,14 +5,19 @@ Require Import lambdaSolve.
 Require Import FunctionalExtensionality.
 Require Import Coq.Logic.PropExtensionality.
 
-
-
+Notation "t1 , t2" := <fun p => p (`t1[p]) (`t2[p])> (in custom term_term at level 30,
+                                       t1 custom term_term,
+                                             t2 custom term_term) : term_scope.
+Notation "'proj1' t" := <`t (fun x => fun y => x)> (in custom term_term at level 35,
+                                  t custom term_term, only parsing) : term_scope.
+Notation "'proj2' t" := <`t (fun x => fun y => y)> (in custom term_term at level 35,
+                                  t custom term_term, only parsing) : term_scope.
 
 (* Contexts *)
 Definition nil := <Nil>.
 Definition cons := <fun ctx => fun lvl => fun ty => Cons ctx lvl ty>.
 
-(* Variables *)
+(* Variables *) 
 Definition zero := <fun env => proj2 env>.
 Definition succ := <fun x => fun env => x (proj1 env)>.
 
@@ -27,25 +32,25 @@ Definition lambda := <fun t => fun env => fun a => t (env , a)>.
 Definition app := <fun t1 => fun t2 => fun env => (t1 env) (t2 env)>.
 Definition true := <fun env => fun p => proj1 p>.
 Definition false := <fun env => fun p => proj2 p>.
-Definition ifexpr := <fun cond => fun t1 => fun t2 => fun env => (cond env) (t1 env, t2 env)>.
+Definition ifexpr := <fun cond => fun t1 => fun t2 => fun env => (cond env) (t1 env , t2 env)>.
 
 Definition weaken := <fun t => fun env => t (proj1 env)>.
-Definition subLast := <fun t => fun toSub => fun env => t (env , toSub env)>.
+Definition subLast := <fun t => fun toSub => fun env => t (env , (toSub env))>.
 
 Ltac unfold_all := unfold nil, cons, zero, succ, pi, U, Bool, Empty, var_to_term, lambda,
-    app, weaken, subLast, level, true, false, ifexpr, Lift in *.
+    app, weaken, subLast, true, false, ifexpr, Lift in *.
 
 (* The deeper shallow embedding *)
 
 Inductive VarTyped : QTerm -> nat -> QTerm -> QTerm -> Prop :=
-| ty_zero : forall ctx T lvl, VarTyped <`cons `ctx {const lvl} `T> lvl <`weaken `T> zero
+| ty_zero : forall ctx T lvl, VarTyped <`cons `ctx {const (term.nconst lvl)} `T> lvl <`weaken `T> zero
 | ty_succ : forall ctx A T s lvl1 lvl2, VarTyped ctx lvl1 A s
                               -> VarTyped <`cons `ctx `lvl2 `T> lvl1 <`weaken `A> <`succ `s>.
 
 Inductive Typed : (*context*) QTerm -> (*level*) nat -> (*Type*) QTerm -> (*Term*) QTerm -> Prop :=
 | ty_lambda : forall ctx A B s lvl,
     Typed ctx (S lvl) <`U> <`pi `A `B> ->
-    Typed <`cons `ctx {const lvl} `A> lvl B s -> Typed ctx lvl <`pi `A `B> <`lambda `s>
+    Typed <`cons `ctx {const (term.nconst lvl)} `A> lvl B s -> Typed ctx lvl <`pi `A `B> <`lambda `s>
 | ty_app : forall ctx A B s1 s2 lvl, Typed ctx lvl <`pi `A `B> s1 -> Typed ctx lvl A s2
                                  -> Typed ctx lvl <`subLast `B `s2> <`app `s1 `s2>
 | ty_var : forall ctx T t lvl, VarTyped ctx lvl T t -> Typed ctx lvl T t
@@ -59,8 +64,8 @@ Inductive Typed : (*context*) QTerm -> (*level*) nat -> (*Type*) QTerm -> (*Term
 | ty_Empty : forall ctx, Typed ctx 1 <`U> Empty
 | ty_Bool : forall ctx, Typed ctx 1 <`U> Bool
 | ty_pi : forall ctx A B lvl,
-    Typed ctx (S lvl) <`U)> A
-    -> Typed <`cons `ctx {const lvl} `A> (S lvl) <`U> B -> Typed ctx (S lvl) <`U> <`pi `A `B>
+    Typed ctx (S lvl) <`U> A
+    -> Typed <`cons `ctx {const (term.nconst lvl)} `A> (S lvl) <`U> B -> Typed ctx (S lvl) <`U> <`pi `A `B>
 | ty_U : forall ctx lvl, Typed ctx (S (S lvl)) <`U> <`U>
 | ty_Lift : forall ctx lvl T, Typed ctx (S lvl) <`U> T -> Typed ctx (S (S lvl)) <`U> <`Lift `T>
 | ty_lift : forall ctx lvl T t, Typed ctx lvl T t -> Typed ctx (S lvl) <`Lift `T> t
@@ -129,7 +134,7 @@ Inductive InCtx : QTerm -> QTerm -> Prop :=
     InCtx env ctx
     -> In (S lvl) <`T `env> s (* is the successor here correct? *)
     -> s val
-    -> InCtx <`env , `val> <`cons `ctx {const lvl} `T>.
+    -> InCtx <`env , `val> <`cons `ctx {const (term.nconst lvl)} `T>.
 
 Theorem fundamental_lemma : forall ctx T lvl t env,
     Typed ctx lvl T t
@@ -154,7 +159,7 @@ Proof.
       specialize (H3 a SAa).
       solve_all.
       specialize (IHTyped2 <`env , `a>).
-      replace <Cons `ctx {const lvl} `A> with <`cons `ctx {const lvl} `A> in IHTyped2 by (unfold cons; normalize; reflexivity).
+      replace <Cons `ctx {const (term.nconst lvl)} `A> with <`cons `ctx {const (term.nconst lvl)} `A> in IHTyped2 by (unfold cons; normalize; reflexivity).
       Check (in_cons _ _ _ _ _ s0 inctx H2).
       destruct (IHTyped2 (in_cons _ _ _ _ _ s0 inctx H2 SAa)) as [Fa' [InBFa' Fa's]].
       rewrite (In_function (S _) _ _ _ H3 InBFa').
@@ -199,6 +204,10 @@ Proof.
       split.
       * solve_all.
         replace <fun p => proj1 p> with <fun x => proj1 x> in * by solve_all.
+        (* TODO: this is where i have to do something manually that wasn't needed in pair version*)
+        apply (f_equal (lift "p" 0)) in H2.
+        normalize_in H2.
+        rewrite H2.
         apply In_Ttrue_S0.
       * normalize.
         apply S0_t1.
@@ -209,6 +218,10 @@ Proof.
       split.
       * solve_all.
         replace <fun p => proj2 p> with <fun x => proj2 x> in * by solve_all.
+        (* TODO: same here *)
+        apply (f_equal (lift "p" 0)) in H2.
+        normalize_in H2.
+        rewrite H2.
         apply In_Tfalse_S0.
       * normalize.
         apply S0_t1.

@@ -100,10 +100,6 @@ Proof.
   apply lift_lift.
 Qed.
 
-Ltac rewrite_SP :=
-  match goal with
-  | |- context [pair (pi1 ?t, pi2 ?t)] => rewrite (@SP t)
-  end.
 Ltac rewrite_subst_lift :=
   match goal with
   | |- context [subst ?s ?i ?t1 (lift ?s ?i ?t2)] => rewrite (@subst_lift s i t1 t2)
@@ -173,9 +169,6 @@ Ltac compute_lifts :=
   repeat match goal with
          | |- context [lift ?s ?i (lam ?x ?t)] => rewrite (@lift_lam s x i t); simpl
          | |- context [lift ?s ?i (app ?t1 ?t2)] => rewrite (@lift_app s i t1 t2)
-         | |- context [lift ?s ?i (pair ?t1 ?t2)]=> rewrite (@lift_pair s i t1 t2)
-         | |- context [lift ?s ?i (pi1 ?t)] => rewrite (@lift_pi1 s i t)
-         | |- context [lift ?s ?i (pi2 ?t)] => rewrite (@lift_pi2 s i t)
          | |- context [lift ?s1 ?k (var ?s2 ?i)] => rewrite (@lift_var s1 s2 i k); simpl
          end.
 
@@ -185,9 +178,6 @@ Ltac compute_subst :=
   repeat (
       try match goal with
       | |- context [subst ?s ?i ?t3 (app ?t1 ?t2)] => rewrite (@subst_app s i t1 t2 t3)
-      | |- context [subst ?s ?i ?t (pair ?t1 ?t2)] => rewrite (@subst_pair s i t t1 t2)
-      | |- context [subst ?s ?i ?t1 (pi1 ?t2)] => rewrite (@subst_pi1 s i t1 t2)
-      | |- context [subst ?s ?i ?t1 (pi2 ?t2)] => rewrite (@subst_pi2 s i t1 t2)
       | |- context [subst ?s2 ?i ?t2 (lam ?s1 ?t1)] =>
           rewrite (@subst_lam s1 s2 i t1 t2); simpl; compute_lifts
       | |- context [subst ?s1 ?k ?toSub (var ?s2 ?i)] =>
@@ -201,9 +191,6 @@ Ltac compute_lifts_in H :=
   repeat match goal with
          | H : context [lift ?s ?i (lam ?x ?t)] |- _ => rewrite (@lift_lam s x i t) in H; simpl in H
          | H : context [lift ?s ?i (app ?t1 ?t2)] |- _ => rewrite (@lift_app s i t1 t2) in H
-         | H : context [lift ?s ?i (pair ?t1 ?t2)] |- _ => rewrite (@lift_pair s i t1 t2) in H
-         | H : context [lift ?s ?i (pi1 ?t)] |- _ => rewrite (@lift_pi1 s i t) in H
-         | H : context [lift ?s ?i (pi2 ?t)] |- _ => rewrite (@lift_pi2 s i t) in H
          | H : context [lift ?s1 ?k (var ?s2 ?i)] |- _ => rewrite (@lift_var s1 s2 i k) in H; simpl in H
          end.
 (*
@@ -218,9 +205,6 @@ Ltac compute_subst_in H :=
   repeat (
       try match goal with
       | H : context [subst ?s ?i ?t3 (app ?t1 ?t2)] |- _ => rewrite (@subst_app s i t1 t2 t3) in H
-      | H : context [subst ?s ?i ?t (pair ?t1 ?t2)] |- _ => rewrite (@subst_pair s i t t1 t2) in H
-      | H : context [subst ?s ?i ?t1 (pi1 ?t2)] |- _ => rewrite (@subst_pi1 s i t1 t2) in H
-      | H : context [subst ?s ?i ?t1 (pi2 ?t2)] |- _ => rewrite (@subst_pi2 s i t1 t2) in H
       | H : context [subst ?s2 ?i ?t2 (lam ?s1 ?t1)] |- _  =>
           rewrite (@subst_lam s1 s2 i t1 t2) in H; simpl in H; compute_lifts_in H
       | H : context [subst ?s1 ?k ?toSub (var ?s2 ?i)] |- _  =>
@@ -230,22 +214,17 @@ Ltac compute_subst_in H :=
   fix_subst_lifts_in H.
 
 Ltac compute_subst_in_old H := repeat (try rewrite subst_app in H;
-                                   try rewrite subst_pair in H;
-                                   try rewrite subst_pi1 in H;
-                                   try rewrite subst_pi2 in H;
                           try (rewrite subst_lam in H ; simpl in H ; compute_lifts_in H) ;
                           try (rewrite subst_var in H; simpl in H);
                                    compute_lifts_in H); fix_subst_lifts_in H.
-Check betapi1.
+
 Ltac normalize :=
   repeat (try match goal with
               | |- context [app (lam ?s ?t1) ?t2] => rewrite (@beta s t1 t2)
-              | |- context [pi1 (pair ?t1 ?t2)] => rewrite (@betapi1 t1 t2)
-              | |- context [pi2 (pair ?t1 ?t2)] => rewrite (@betapi2 t1 t2)
               end;
           compute_subst).
-Ltac normalize_old := repeat (rewrite ?beta, ?betapi1, ?betapi2; compute_subst).
-Ltac normalize_in H := repeat (rewrite ?beta, ?betapi1, ?betapi2 in H; compute_subst_in H).
+Ltac normalize_old := repeat (rewrite ?beta; compute_subst).
+Ltac normalize_in H := repeat (rewrite ?beta in H; compute_subst_in H).
 
 Theorem proveEqualityInParts (A B : Type) (f1 f2 : A -> B) (a1 a2 : A)
   : f1 = f2 -> a1 = a2 -> f1 a1 = f2 a2.
@@ -265,12 +244,13 @@ Ltac lambda_solve_step :=
       | H : var ?s1 0 = var ?s2 0 |- _ => apply varInj in H
       | H : const ?t1 = const ?t2 |- _ => apply constInj in H
       | H : @eq string ?s ?s |- _ => clear H
-      | H : @eq string ?s1 ?s2 |- _ => inversion H
-      | H : @eq QTerm (pair ?t1 ?t2) (pair ?t1' ?t2') |- _ => apply pairInj in H; destruct H
+      | H : @eq string ?s1 ?s2 |- _ => solve [inversion H]
+      | H : @eq term.Const (term.sconst ?c1) (term.sconst ?c2) |- _ => inversion H; clear H
+      | H : @eq term.Const (term.nconst ?c1) (term.nconst ?c2) |- _ => inversion H; clear H
+      | H : @eq nat ?s ?s |- _ => clear H
+      | H : @eq nat ?s1 ?s2 |- _ => solve [inversion H]
       | H : @eq QTerm ?t1 ?t2 |- _ => first [
                                          rewrite beta in H ; compute_subst_in H
-                                       | rewrite betapi1 in H
-                                       | rewrite betapi2 in H                    
                                        | subst t1
                                        | subst t2 ]
       (* If we are trying to prove an equality involving functions that are not in QTerm,
@@ -283,8 +263,6 @@ Ltac lambda_solve_step :=
       | |- @eq QTerm ?a ?b => first [ reflexivity]
       | H : _ |- _ => first [
                    rewrite beta in H ; compute_subst_in H
-                 | rewrite betapi1 in H ; compute_subst_in H
-                 | rewrite betapi2 in H ; compute_subst_in H
                        ]
       (* These need to work like this instead of just rewrites to prevent specializing evars *)
       (*| |- context [app (lam ?s ?t1) ?t2] =>
@@ -575,10 +553,6 @@ Inductive UnWeaken : QTerm -> string -> nat -> QTerm -> Prop :=
     UnWeaken t1 s i t1'
     -> UnWeaken t2 s i t2'
     -> UnWeaken (app t1 t2) s i (app t1' t2')
-| uw_pair : forall t1 t2 t1' t2' s i,
-    UnWeaken t1 s i t1'
-    -> UnWeaken t2 s i t2'
-    -> UnWeaken (pair t1 t2) s i (pair t1' t2')
 | uw_lift_lift : forall t t' s1 i1 s2 i2,
     eqb s2 s1 = false \/ Nat.eqb i1 i2 = false (* if they are equal, then other constructor handles it*)
     -> UnWeaken t s2 (if (eqb s2 s1) then if (Nat.ltb i1 i2) then pred i2 else i2 else i2) t'
@@ -640,9 +614,6 @@ Proof.
       rewrite Bool.andb_false_r.
       reflexivity.
   - lambda_solve.
-  - subst.
-    normalize.
-    reflexivity.
   - subst t.
     Check lift_lift.
     rewrite lift_lift.
@@ -784,51 +755,13 @@ e.g,  FindSubTo (x, y) out (fun t => <`t [x / proj1 `out] [y / proj2 `out]>)
 *)
 Inductive FindSubTo : QTerm -> QTerm -> (QTerm -> QTerm) -> Prop :=
 | fst_var : forall i s out, FindSubTo (var s i) out (subst s i out)
-| fst_fst : forall t out sub,
-    FindSubTo t <`out, DUMMY> sub
-    -> FindSubTo (pi1 t) out sub
-| fst_snd : forall t out sub,
-    FindSubTo t <DUMMY, `out> sub
-    -> FindSubTo (pi2 t) out sub
-| fst_pair : forall t1 t2 out sub1 sub2,
-    FindSubTo t1 <proj1 `out> sub1
-    -> FindSubTo (sub1 t2) <proj2 `out> sub2
-    (*-> FindSubTo t2 <proj2 `out> sub2*)
-    -> FindSubTo (pair t1 t2) out (fun t => sub2 (sub1 t))
 .
 (*
 e.g,  FindWeaken (x, y) (fun t => <`t [x] [y]>)
  *)
 Inductive FindWeaken : QTerm -> (QTerm -> QTerm) -> Prop :=
 | fw_var : forall i s , FindWeaken (var s i) (lift s i)
-| fw_fst : forall t ren,
-    FindWeaken t ren
-    -> FindWeaken (pi1 t) ren
-| fw_snd : forall t ren,
-    FindWeaken t ren
-    -> FindWeaken (pi2 t) ren
-| fw_pair : forall t1 t2  ren1 ren2,
-    FindWeaken t1 ren1
-    -> FindWeaken t2 ren2
-    -> FindWeaken (pair t1 t2) (fun t => ren2 (ren1 t))
 .
-
-Ltac pair_pattern_case_helper H :=
-  match type of H with
-  | ?t1 ?t2 = ?t3 =>
-      let temp := fresh "temp" in
-      let sub := open_constr:((_:QTerm -> QTerm)) in
-      apply (f_equal (fun t => <`t [p]>)) in H;
-      compute_subst_in H;
-      assert (FindSubTo t2 <p> sub) as temp; [
-          repeat (compute_subst; once constructor)
-        |
-          apply (f_equal (fun t => sub t)) in H;
-          compute_subst_in H;
-          repeat rewrite <- SP in H;
-          clear temp
-        ]
-  end.
 
 
 (* In order to make comparing things up to normal form work, this sorts the lifts into a standard order,
@@ -886,63 +819,10 @@ Ltac pair_pattern_case_goal_helper :=
         ]
   end.
 
-Ltac pair_pattern_case :=
-  match goal with
-  | H : ?t1 (pair ?l ?r) = ?t3 |- _ => pair_pattern_case_helper H
-  | H : ?t1 (pi1 ?t2) = ?t3 |- _ => pair_pattern_case_helper H
-  | H : ?t1 (pi2 ?t2) = ?t3 |- _ => pair_pattern_case_helper H
-  | |- ?t1 (pair ?l ?r) = ?t2 => pair_pattern_case_goal_helper
-  | |- ?t1 (pi1 ?t2) = ?t3 => pair_pattern_case_goal_helper
-  | |- ?t1 (pi2 ?t2) = ?t3 => pair_pattern_case_goal_helper
-  end.
 
 Inductive GetMVAndArgs : QTerm -> QTerm -> list (QTerm + (string * nat)) -> Prop :=
 
 .
-
-Theorem pattern_case_pair
-        (t1 t2 : QTerm)
-        (H : <`t1 [x] [y] (x, y)> = t2)
-  : <`t1> = <fun p => `t2 [p] [x/ proj1 p] [y / proj2 p]>.
-Proof.
-  pair_pattern_case.
-  Time simple_pattern_case.
-  assumption.
-Qed.
-
-Theorem pair_case_same_string
-        (t1 t2 : QTerm)
-        (H : <`t1 [x] [x @1] (x, {var "x" 1})> = t2)
-  : t1 = <fun p => `t2 [p] [x / proj1 p] [x / proj2 p]>.
-Proof.
-  pair_pattern_case.
-  simple_pattern_case.
-  assumption.
-Qed.
-
-Theorem pattern_case_fst
-        (t : QTerm)
-        (H : <`t [x] (proj1 x)> = <Const>)
-  : t = <fun x => Const>.
-Proof.
-  pair_pattern_case.
-  normalize_in H.
-  simple_pattern_case.
-  lambda_solve.
-Qed.
-
-
-(* We also need to be able to solve these pair cases in the goal, in case there
-   are evars to be solved for in the goal itself. *)
-Definition make_evar_for_test_2 (t : QTerm) (H : <`t [x] [y] (x, y)> = <C3>) : True := I.
-
-Theorem pair_case_goal : True.
-  refine (make_evar_for_test_2 _ _).
-  pair_pattern_case.
-  simple_pattern_case.
-  reflexivity.
-Qed.
-
 
 Theorem test_lift_ordering
   : <C [z] [a] [b @1] [b]> = <{lift "b" 2 <C [a] [b]>} [z]>.
@@ -951,58 +831,29 @@ Proof.
   reflexivity.
 Qed.
 
-
-
-Definition make_evar_for_test_3 (t1 t2 : QTerm) (H : <`t1 [x] [y] (x, y)> = <C (`t2 [x] [y]) x y>)
-  : True := I.
-Theorem pair_case_goal_rocqmetavar (t2 : QTerm) : True.
-  refine (make_evar_for_test_3 _ t2 _).
-  pair_pattern_case.
-  simple_pattern_case.
-  reflexivity.
-Qed.
-
-Theorem pattern_case_pair_2
-        (t1 t2 : QTerm)
-        (H : <`t1 [x] [y] [z] [w] (x, y) (z, w)> = t2)
-  : <`t1> = <fun p1 => fun p2 => `t2 [p1] [p2] [x/ proj1 p1] [y / proj2 p1] [z / proj1 p2] [z / proj2 p2]>.
-Proof.
-  Time pair_pattern_case.
-  simple_pattern_case.
-  pair_pattern_case.
-  simple_pattern_case.
-  Unset Printing Notations.
-  compute_subst_in H.
-  subst.
-  lambda_solve.
-  (*
-    The problem is that there are substs that will stick around.
-    I didn't really design the automation to handle that; instead, metavars are supposed to
-    be in closed scope.
-   *)
-Abort.
 (*
 So the pair case needs to be fixed to work more generally.
 For now though, I'll just work with it.
 *)
 
-(* Pi injectivity should work, but I think it requires the special cases *)
+(* Pi injectivity won't work in this version? *)
 Theorem pi_injectivity
         (A B A' B': QTerm)
-        (H : <fun env => Pi (`A [env] env) (fun a => `B [env] [a] (env, a))>
-           = <fun env => Pi (`A' [env] env) (fun a => `B' [env] [a] (env, a))>)
+        (H : <fun env => Pi (`A [env] env) (fun a => `B [env] [a] (Pair env a))>
+           = <fun env => Pi (`A' [env] env) (fun a => `B' [env] [a] (Pair env a))>)
   : A = A' /\ B = B'.
   lambda_solve.
   repeat neutral_inj_case.
   lambda_solve.
   simple_pattern_case.
   lambda_solve.
-  Time pair_pattern_case.
-  simple_pattern_case.
   lambda_solve.
-  repeat rewrite <- eta.
-  auto.
-Qed.
+  (* this doesn't work. however, i think that i might be able to make this work even without SP.
+   the idea is that if t1 and t2 are closed terms, and p, x, and y are free variables, then
+   it think that the following might be true:
+   t1 (p x y) = t2 (p x y)   <->   t1 = t2
+   if so, then i can just use a constant "Pair" instead of a built-in pair constructor.*)
+Abort.
 (* TODO: This needs to work. *)
 
 Theorem simpler_thing_that_is_needed_first

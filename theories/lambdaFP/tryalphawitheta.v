@@ -1692,7 +1692,36 @@ Proof.
         apply rt_refl.
       * assumption.
   (* par_alpha case *)
-  - give_up.
+  - split.
+    + exists t2.
+      split.
+      * simpl.
+        case_nat_comparisons.
+        -- simplify_nat_string_eqs.
+           rewrite subst_lift.
+           eapply rt_trans.
+           apply rt_step.
+           apply singb_beta.
+           rewrite subst_lift_cancel_2.
+           apply rt_refl.
+        -- simplify_nat_string_eqs.
+           eapply rt_trans.
+           apply rt_step.
+           apply singb_beta.
+           rewrite lift_subst.
+           case_nat_comparisons.
+           rewrite subst_subst.
+           case_nat_comparisons.
+           rewrite lift_lift.
+           case_nat_comparisons.
+           rewrite subst_lift.
+           rewrite subst_lift_cancel_2.
+           apply rt_refl.
+      * assumption.
+    + exists t2.
+      split; [|split].
+      * 
+
   (* pare_eta case *)
   - specialize (IHpare _ _ eq_refl) as [[P [betastep etastep]] thingy].
     split.
@@ -1780,7 +1809,7 @@ Proof.
         apply singb_pi2.
         assumption.
       * assumption.
-Abort.
+Qed.
 
 Theorem beta_eta_commute : square pare singb (clos_refl_trans _ singb) pare.
 Proof.

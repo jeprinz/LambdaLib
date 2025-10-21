@@ -146,27 +146,6 @@ Proof.
   (* TODO: This proof can be way shorter*)
 Qed.
 
- 
-Theorem pairInj : forall t1 t2 t1' t2', <`t1, `t2> = <`t1', `t2'> -> t1 = t1' /\ t2 = t2'.
-Proof.
-  intros.
-  split.
-  assert (<proj1 (`t1, `t2)> = <proj1 (`t1', `t2')>).
-  {
-    rewrite H.
-    reflexivity.
-  }
-  repeat rewrite betapi1 in H0.
-  assumption.
-  assert (<proj2 (`t1, `t2)> = <proj2 (`t1', `t2')>).
-  {
-    rewrite H.
-    reflexivity.
-  }
-  repeat rewrite betapi2 in H0.
-  assumption.
-Qed.
-
 Theorem liftInj : forall s i t1 t2, lift s i t1 = lift s i t2 -> t1 = t2.
 Proof.
   intros.
