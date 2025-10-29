@@ -5,9 +5,15 @@ Require Import lambdaSolve.
 Require Import FunctionalExtensionality.
 Require Import Coq.Logic.PropExtensionality.
 
-Notation "t1 , t2" := <fun p => p (`t1[p]) (`t2[p])> (in custom term_term at level 30,
+Definition pair := <fun t1 => fun t2 => fun p => p t1 t2>.
+Notation "t1 , t2" := <`pair `t1 `t2> (in custom term_term at level 30,
                                        t1 custom term_term,
                                              t2 custom term_term) : term_scope.
+(*Notation "t1 , t2" := <fun p => p (`t1[p]) (`t2[p])> (in custom term_term at level 30,
+                                       t1 custom term_term,
+                                             t2 custom term_term) : term_scope.*)
+
+
 Notation "'proj1' t" := <`t (fun x => fun y => x)> (in custom term_term at level 35,
                                   t custom term_term, only parsing) : term_scope.
 Notation "'proj2' t" := <`t (fun x => fun y => y)> (in custom term_term at level 35,
@@ -38,7 +44,7 @@ Definition weaken := <fun t => fun env => t (proj1 env)>.
 Definition subLast := <fun t => fun toSub => fun env => t (env , (toSub env))>.
 
 Ltac unfold_all := unfold nil, cons, zero, succ, pi, U, Bool, Empty, var_to_term, lambda,
-    app, weaken, subLast, true, false, ifexpr, Lift in *.
+    app, weaken, subLast, true, false, ifexpr, Lift, pair in *.
 
 (* The deeper shallow embedding *)
 
@@ -160,8 +166,8 @@ Proof.
       solve_all.
       specialize (IHTyped2 <`env , `a>).
       replace <Cons `ctx {const (term.nconst lvl)} `A> with <`cons `ctx {const (term.nconst lvl)} `A> in IHTyped2 by (unfold cons; normalize; reflexivity).
-      Check (in_cons _ _ _ _ _ s0 inctx H2).
       destruct (IHTyped2 (in_cons _ _ _ _ _ s0 inctx H2 SAa)) as [Fa' [InBFa' Fa's]].
+      solve_all.
       rewrite (In_function (S _) _ _ _ H3 InBFa').
       apply Fa's.
   (* app *)
@@ -175,7 +181,7 @@ Proof.
     exists (F <`s2 `env>).
     specialize (In_B'a_F'a <`s2 `env> s2Elem).
     specialize (s1Elem <`s2 `env> s2Elem).
-    normalize_in In_B'a_F'a.
+    solve_all.
     split; auto.
   (* var *)
   - intros env inctx.
@@ -194,6 +200,7 @@ Proof.
   (* if *)
   - intros env inctx.
     specialize (IHTyped1 env inctx) as [S [In_Bool_S S_cond]].
+    solve_all.
     inversion In_Bool_S; solve_all.
     subst.
     destruct S_cond.
@@ -204,7 +211,7 @@ Proof.
       split.
       * solve_all.
         replace <fun p => proj1 p> with <fun x => proj1 x> in * by solve_all.
-        (* TODO: this is where i have to do something manually that wasn't needed in pair version*)
+        (* TODO: this is where i have to do something manually that the tactic should do, see onenote for explanation, see 20394u23*)
         apply (f_equal (lift "p" 0)) in H2.
         normalize_in H2.
         rewrite H2.
@@ -272,6 +279,7 @@ Proof.
     unfold F.
     extensionality b.
     apply propositional_extensionality.
+    solve_all.
     split; intros; eauto.
     destruct H2.
     destruct H2.
