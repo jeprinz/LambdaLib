@@ -10,13 +10,23 @@ Require Import prog2.
 Require Import pmatch.
 Require Import automation.
 
+
+Definition pair := <fun t1 => fun t2 => fun p => p t1 t2>.
+Notation "t1 , t2" := <`pair `t1 `t2> (in custom term_term at level 30,
+                                       t1 custom term_term,
+                                             t2 custom term_term) : term_scope.
+
+Notation "'proj1' t" := <`t (fun x => fun y => x)> (in custom term_term at level 35,
+                                  t custom term_term, only parsing) : term_scope.
+Notation "'proj2' t" := <`t (fun x => fun y => y)> (in custom term_term at level 35,
+                                  t custom term_term, only parsing) : term_scope.
+
 Definition nil := <Nil>.
 Definition cons := <fun ctx => fun lvl => fun ty => Cons ctx lvl ty>.
 
 Definition zero := <fun env => proj2 env>.
 Definition succ := <fun x => fun env => x (proj1 env)>.
 
-Definition level (n : nat) : QTerm := const n.
 (* Should I have an explicit type level on the pis? *)
 Definition pi := <fun x => fun y => fun env => Pi (x env) (fun a => y (env , a))>.
 Definition U : QTerm := <(*fun lvl => *)fun env => U (*lvl*)>.
@@ -35,19 +45,19 @@ Definition weaken := <fun t => fun env => t (proj1 env)>.
 Definition subLast := <fun t => fun toSub => fun env => t (env , toSub env)>.
 
 Ltac unfold_all := unfold nil, cons, zero, succ, pi, U, Bool, Empty, var_to_term, lambda,
-    app, weaken, subLast, level, true, false, ifexpr, Lift in *.
+    app, weaken, subLast, true, false, ifexpr, Lift in *.
 
 (* The deeper shallow embedding *)
 
 Inductive VarTyped : QTerm -> nat -> QTerm -> QTerm -> Prop :=
-| ty_zero : forall ctx T lvl, VarTyped <`cons `ctx {const lvl} `T> lvl <`weaken `T> zero
+| ty_zero : forall ctx T lvl, VarTyped <`cons `ctx {const (term.nconst lvl)} `T> lvl <`weaken `T> zero
 | ty_succ : forall ctx A T s lvl1 lvl2, VarTyped ctx lvl1 A s
                               -> VarTyped <`cons `ctx `lvl2 `T> lvl1 <`weaken `A> <`succ `s>.
 
 Inductive Typed : (*context*) QTerm -> (*level*) nat -> (*Type*) QTerm -> (*Term*) QTerm -> Prop :=
 | ty_lambda : forall ctx A B s lvl,
     Typed ctx (S lvl) <`U(*{const lvl}*)> <`pi `A `B> ->
-    Typed <`cons `ctx {const lvl} `A> lvl B s -> Typed ctx lvl <`pi `A `B> <`lambda `s>
+    Typed <`cons `ctx {const (term.nconst lvl)} `A> lvl B s -> Typed ctx lvl <`pi `A `B> <`lambda `s>
 | ty_app : forall ctx A B s1 s2 lvl, Typed ctx lvl <`pi `A `B> s1 -> Typed ctx lvl A s2
                                  -> Typed ctx lvl <`subLast `B `s2> <`app `s1 `s2>
 | ty_var : forall ctx T t lvl, VarTyped ctx lvl T t -> Typed ctx lvl T t
@@ -63,7 +73,7 @@ Inductive Typed : (*context*) QTerm -> (*level*) nat -> (*Type*) QTerm -> (*Term
 | ty_pi : forall ctx A B lvl,
     Typed ctx (S lvl) <`U(*{const lvl}*)> A
     (* TODO: is S lvl correct below? *)
-    -> Typed <`cons `ctx {const lvl} `A> (S lvl) <`U(*{const lvl}*)> B -> Typed ctx (S lvl) <`U(*{const lvl}*)> <`pi `A `B>
+    -> Typed <`cons `ctx {const (term.nconst lvl)} `A> (S lvl) <`U(*{const lvl}*)> B -> Typed ctx (S lvl) <`U(*{const lvl}*)> <`pi `A `B>
 | ty_U : forall ctx lvl, Typed ctx (S (S lvl)) <`U(*{const (S lvl)}*)> <`U(*{const lvl}*)>
 | ty_Lift : forall ctx lvl T, Typed ctx (S lvl) <`U> T -> Typed ctx (S (S lvl)) <`U> <`Lift `T>
 | ty_lift : forall ctx lvl T t, Typed ctx lvl T t -> Typed ctx (S lvl) <`Lift `T> t
@@ -76,6 +86,7 @@ Ltac solve_no_unfold := repeat (lambda_solve ; repeat neutral_inj_case ;lambda_s
 Ltac solve_all := repeat (unfold_all ; lambda_solve ; repeat neutral_inj_case ;lambda_solve
                           ; repeat fast_neutral_unequal_case).
 
+(* the logical predicate, a function from a type to a set of terms that the type should represent *)
 Fixpoint In (level : nat) : QTerm -> option (QTerm -> Prop).
   refine (runProg (fun T =>
                      (* Pi A B *)
@@ -96,27 +107,42 @@ Inductive InCtx : QTerm -> QTerm -> Prop :=
     InCtx env ctx
     -> In (S lvl) <`T `env>  = Some s (* is the successor here correct? *)
     -> s val
-    -> InCtx <`env , `val> <`cons `ctx {const lvl} `T>.
+    -> InCtx <`env , `val> <`cons `ctx {const (term.nconst lvl)} `T>.
 
 Theorem fundamental_lemma : forall ctx T lvl t env,
     Typed ctx lvl T t
     -> InCtx env ctx
-    -> exists s, In (S lvl) <`T `env> = Some s (* TODO: S lvl? In 0 is just empty. *)
-    /\ s <`t `env>.
+    (* TODO: S lvl? In 0 is just empty. *)
+    -> match (In (S lvl) <`T `env>) with
+       | Some s => s <`t `env>
+       | None => False
+       end.
 Proof.
   intros.
   generalize dependent env.
   induction H.
   (* lambda *)
   - intros env inctx.
-    specialize (IHTyped1 env inctx) as [SU [InU piAB_in_SU]].
+    specialize (IHTyped1 env inctx).
     evaluate_function_in solve_all InU.
 
     give_up.
   (* app *)
   - intros env inctx.
-    specialize (IHTyped1 env inctx) as [SPIAB [inPiAB s1Elem]].
-    specialize (IHTyped2 env inctx) as [SA [inA s2Elem]].
+    specialize (IHTyped1 env inctx).
+    specialize (IHTyped2 env inctx).
+    Check PmatchDef1.
+    evaluate_function_in solve_all IHTyped1.
+    Search collectOption.
+    unfold In in IHTyped1.
+    repeat (
+      unfold runProg in IHTyped1;
+      rewrite ?runProgDefinitionRet, ?runProgDefinitionRec, ?collectOptionDef in IHTyped1).
+    try (erewrite Pmatch2Def1 in IHTyped1 ; [| solve [solve_all]
+                                     | solve [intros; solve_all] | solve [intros; solve_all]]);
+    simpl in IHTyped1.
+    Check Pmatch2Def1.
+    evaluate_function_in solve_all IHTyped1.
     (* this is how fold works: *)
     unfold In in inPiAB.
     progress fold (In (S lvl) <`pi `A `B `env>) in inPiAB.

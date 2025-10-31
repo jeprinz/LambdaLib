@@ -5,14 +5,22 @@ Require Import lambdaSolve.
 Require Import FunctionalExtensionality.
 Require Import Coq.Logic.PropExtensionality.
 
+Definition pair := <fun t1 => fun t2 => fun p => p t1 t2>.
+Notation "t1 , t2" := <`pair `t1 `t2> (in custom term_term at level 30,
+                                       t1 custom term_term,
+                                             t2 custom term_term) : term_scope.
+
+Notation "'proj1' t" := <`t (fun x => fun y => x)> (in custom term_term at level 35,
+                                  t custom term_term, only parsing) : term_scope.
+Notation "'proj2' t" := <`t (fun x => fun y => y)> (in custom term_term at level 35,
+                                  t custom term_term, only parsing) : term_scope.
+
 Module S.
   Definition nil := <Nil>.
   Definition cons := <fun ctx => fun lvl => fun ty => Cons ctx lvl ty>.
 
   Definition zero := <fun env => proj2 env>.
   Definition succ := <fun x => fun env => x (proj1 env)>.
-
-  Definition level (n : nat) : QTerm := const n.
 
   Definition pi := <fun x => fun y => fun env => Pi (x env) (fun a => y (env , a))>.
   Definition U : QTerm := <fun env => U>.
@@ -41,21 +49,21 @@ Module S.
   Definition subTerm := <fun sub => fun t => fun env => t (sub env)>.
 
   Ltac unfold_all := unfold nil, cons, zero, succ, pi, U, Bool, Empty, var_to_term, lambda,
-      app, weaken, subLast, level, true, false, ifexpr, Lift,
-      idSub, weaken1Ren, liftSub, subTerm in *.
+      app, weaken, subLast, true, false, ifexpr, Lift,
+      idSub, weaken1Ren, liftSub, subTerm, pair in *.
 End S.
 
 (* The deeper shallow embedding *)
 
 Inductive Var : QTerm -> nat -> QTerm -> QTerm -> Type :=
-| zero : forall {ctx T lvl}, Var <`S.cons `ctx {const lvl} `T> lvl <`S.weaken `T> S.zero
+| zero : forall {ctx T lvl}, Var <`S.cons `ctx {const (term.nconst lvl)} `T> lvl <`S.weaken `T> S.zero
 | succ : forall {ctx A T s lvl1 lvl2}, Var ctx lvl1 A s
                               -> Var <`S.cons `ctx `lvl2 `T> lvl1 <`S.weaken `A> <`S.succ `s>.
 
 Inductive Typed : (*context*) QTerm -> (*level*) nat -> (*Type*) QTerm -> (*Term*) QTerm -> Type :=
 | lambda : forall {ctx A B s lvl},
     (*Typed ctx (S lvl) <`U(*{const lvl}*)> <`pi `A `B> ->*)
-    Typed <`S.cons `ctx {const lvl} `A> lvl B s -> Typed ctx lvl <`S.pi `A `B> <`S.lambda `s>
+    Typed <`S.cons `ctx {const (term.nconst lvl)} `A> lvl B s -> Typed ctx lvl <`S.pi `A `B> <`S.lambda `s>
 (*
 | app : forall ctx A B s1 s2 lvl, Typed ctx lvl <`pi `A `B> s1 -> Typed ctx lvl A s2
                                  -> Typed ctx lvl <`subLast `B `s2> <`app `s1 `s2>*)
@@ -86,9 +94,8 @@ Ltac solve_no_unfold := repeat (lambda_solve ; repeat neutral_inj_case ;lambda_s
 
 Ltac solve_all := repeat (S.unfold_all ; lambda_solve ; (repeat neutral_inj_case ;lambda_solve)
                           ; (repeat fast_neutral_unequal_case); (repeat simple_pattern_case);
-                          (repeat pair_pattern_case; subst);
                           hide_evars;
-                          rewrite <- ?eta, <- ?SP;
+                          rewrite <- ?eta;
                           sort_lifts;
                           unhide_evars).
 

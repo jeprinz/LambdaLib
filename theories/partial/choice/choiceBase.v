@@ -88,6 +88,47 @@ Proof.
     assumption.
 Qed.
 
+Definition Pif' {A : Type} (P : Prop) (th : P -> A) (el : ~P -> A) : A.
+  Search (Prop -> Type).
+  Check (sum {a : A | P} {a : A | ~ P}).
+  refine (choose A (fun a => {p : P | a = th p} \/ {np : ~P | a = el np})).
+  destruct (classic P).
+  - exists (th H).
+    apply or_introl.
+    econstructor; easy.
+  - exists (el H).
+    apply or_intror.
+    econstructor; easy.
+Defined.
+
+Theorem Pif'Def1 : forall (A : Type) P (th : P -> A) (el : ~P -> A) (p : P), Pif' P th el = th p.
+Proof.
+  intros.
+  unfold Pif'.
+  apply choiceInd.
+  intros.
+  destruct H.
+  - destruct H.
+    rewrite (proof_irrelevance P p x).
+    assumption.
+  - destruct H.
+    contradiction.
+Qed.
+
+Theorem Pif'Def2 : forall (A : Type) P (th : P -> A) (el : ~P -> A) (np : ~P), Pif' P th el = el np.
+Proof.
+  intros.
+  unfold Pif'.
+  apply choiceInd.
+  intros.
+  destruct H.
+  - destruct H.
+    contradiction.
+  - destruct H.
+    rewrite (proof_irrelevance (~P) np x).
+    assumption.
+Qed.
+
 Check choose.
 (* Using choice, returns the element of T satisfying P if it exists, otherwise None *)
 Definition chooseOption (T : Type) (P : T -> Prop) : option T.
