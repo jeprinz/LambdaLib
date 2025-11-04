@@ -6,7 +6,9 @@ Require Import choiceBase.
 
 (*
 in this file, i'm doing a version that uses a default value so there doesn't need to be
-and option monad. i'm hoping this will make things way simpler.
+an option monad. i'm hoping this will make things way simpler.
+
+THIS IDEA DOESN'T WORK: see comment later down in the file.
 *)
 Inductive Prog (A B : Type) : Type :=
 | Ret : B -> Prog A B
@@ -121,8 +123,19 @@ runProg d f a = f (runProg d f)
 
 
 before any of that, does my original idea for this file even work?
+i THINK that the following statement is false.
+consider a subsetof A represented by (I, args) such that (runProgR def _) is NOT defined on all of I.
+then,
+runProgImpl def (Rec _ _ I args rest) default = default
+however,
+runProgImpl def (rest (fun i => runProg def (args i) default)) default
+is not necessarily equal to default.
 
-*)
+for example, if (rest _ = Ret a), where a != default.
+
+ *)
+
+
 
 Theorem runProgDefinitionRec {A B : Type} {def : A -> Prog A B}
         {I : Type}

@@ -10,7 +10,7 @@ of a recursive thing.
 *)
 
 Inductive runProgR {A B : Type} (prog : (A -> B) -> A -> B) : A -> B -> Prop :=
-| c :forall (S : A -> Prop) a b (par : A -> B),
+| defined : forall (S : A -> Prop) a b (par : A -> B),
     (forall a' b', S a' -> par a' = b' -> runProgR prog a' b')
     -> (forall (f : A -> B), (forall a, S a -> par a = (f a)) -> prog f a = b)
     -> runProgR prog a b
@@ -80,17 +80,43 @@ Defined.
 Theorem runProgDef {A B : Type} (prog : (A -> B) -> A -> B) (default : B) (a : A) 
   : runProg prog default a = prog (runProg prog default) a.
 Proof.
+Abort.
 
-  (*
-    i don't this that this works as is.
-    suppose that there is abad : A, such that (runProg prog d abad = d)
-    then suppose that (prog f a' = 1 + abad).
-    then (runProg prog d a' = default),
-    but actually this theorm wants it to be (1 + default).
+(*
+i don't this that this works as is.
+suppose that there is abad : A, such that (runProg prog d abad = d)
+then suppose that (prog f a' = 1 + abad).
+then (runProg prog d a' = default),
+but actually this theorm wants it to be (1 + default).
 
-    i thiink that i can fix this by adjusting the definition of runProgR,
-    basically make it include the defaults itself and be total.
-    add a second constructor that inputs the negation of the premises of the first constructor
-    and then says it outputs a default there.
-    using lem, this will trivially be total.
-*)
+i thiink that i can fix this by adjusting the definition of runProgR,
+basically make it include the defaults itself and be total.
+add a second constructor that inputs the negation of the premises of the first constructor
+and then says it outputs a default there.
+using lem, this will trivially be total.
+
+no, that doesn't work because it wouldn't be strictly positive.
+it might be possible to fix this by using option instead of a default, but then that
+doesn't solve the collectOption problem.
+
+
+
+surely given prog : (A -> B) -> A -> B,
+its possible to define mathematically the concept of "the subset of A that it depends on for a given
+input" as, given input : A, the subset of a : A where for any (rec: A -> B), there exists rec' : A -> B that differs from rec only at a, that would make (prog rec input != prog rec' input).
+this gives a definition "reccalls : A -> (A -> Prop)"
+
+then, given this definition of the subset that it recurses on,
+surely its possible for me to define the idea of "is there a cycle starting at a", which is just:
+take the minimal subset of A including a, such that its closed under reccalls.
+
+but even this, i'm not sure that i can actually define a function with the equation that i want!!!
+i want (runProg prog a = prog (runProg prog) a).
+but this is only ever true when the recursive calls are defined.
+but in order for it to be useful, it needs to be able to unfold even without knowing yet if
+the recursive calls are defined.
+
+i think that maybe this is just something that can't really be defined in dependent type theory
+as is.
+
+ *)

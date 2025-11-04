@@ -172,6 +172,7 @@ Theorem run_test_function_5_1 : test_function_5 <A (A C)> = Some <B (B D)>.
 Proof.
   unfold test_function_5.
   evaluate_function solve_all.
+  
   Check runProgDefinitionRec.
   Check PmatchDef1.
   Check @Pmatch.
