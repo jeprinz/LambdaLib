@@ -66,10 +66,10 @@ Definition runProgImpl {A B : Type} (def : A -> Prog A B) (p : Prog A B) : optio
 Defined.
 
 Definition runProg {A B : Type} (def : A -> Prog A B) (a : A) : option B :=
-  (runProgImpl def (def a)).
+  (@runProgImpl _ _ def (def a)).
 
 Theorem runProgDefinitionRet {A B : Type} (def : A -> Prog A B) (b : option B)
-  : runProgImpl def (Ret _ _ b) = b.
+  : @runProgImpl _ _ def (Ret _ _ b) = b.
   unfold runProgImpl, chooseOption.
   apply choiceInd.
   intros.
@@ -91,7 +91,7 @@ Theorem runProgDefinitionRec2 {A B : Type} {def : A -> Prog A B}
         {rest : (I -> B) -> Prog A B}
         {recVals : I -> B}
         (recValsCorrect : forall (i : I), runProg def (args i) = Some (recVals i))
-  : runProgImpl def (Rec _ _ I args rest) = runProgImpl def (rest recVals).
+  : @runProgImpl _ _ def (Rec _ _ I args rest) = @runProgImpl _ _ def (rest recVals).
  Proof.
    unfold runProg, runProgImpl, chooseOption in *.
    repeat apply choiceInd.
@@ -136,9 +136,9 @@ Theorem runProgDefinitionRec {A B : Type} {def : A -> Prog A B}
         {I : Type}
         {args : I -> A}
         {rest : (I -> B) -> Prog A B}
-  : runProgImpl def (Rec _ _ I args rest) =
+  : @runProgImpl _ _ def (Rec _ _ I args rest) =
       bind ((collectOption (fun i => runProg def (args i))) : option (I -> B))
-           (fun f => runProgImpl def (rest f)).
+           (fun f => @runProgImpl _ _ def (rest f)).
 Proof.
   repeat unfold runProgImpl, runProg, collectOption, chooseOption.
   repeat apply choiceInd.

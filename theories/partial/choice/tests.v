@@ -122,30 +122,75 @@ f (A x y) = B (f x) (f y)
 f _ = D
  *)
 
-Check Rec.
-Definition test_function_4 : QTerm -> option QTerm.
-  refine (
-      runProg (fun t =>
+Definition test_function_4_part : QTerm -> Prog QTerm QTerm :=
+  (fun t =>
              Pmatch2
                (fun x y => t = <A `x `y>)
                (fun x y => Rec _ _ bool
                                (fun b => if b then x else y)
                                (fun rec => ret <B {rec true} {rec false}>)
                )
-               (ret <D>))
+               (ret <D>)).
 
+Definition test_function_4 : QTerm -> option QTerm := runProg test_function_4_part.
+
+Ltac evaluate_function_alt solve_tactic :=
+  repeat (
+      unfold runProg;
+      (*rewrite ?runProgDefinitionRet, ?runProgDefinitionRec, ?collectOptionDef;*)
+      try (erewrite PmatchDef1 ; [| solve [solve_tactic] | solve [intros; solve_tactic]]);
+      try (erewrite PmatchDef2 ; [|intros; solve [solve_tactic]]);
+      try (erewrite Pmatch2Def1 ; [| solve [solve_tactic]
+                                  | solve [intros; solve_tactic] | solve [intros; solve_tactic]]);
+      try (erewrite Pmatch2Def2 ; [|intros; solve [solve_tactic]]);
+      try (erewrite PifDef1 ; [| solve [solve_tactic]]);
+      try (erewrite PifDef2 ; [| intros; solve [solve_tactic]]);
+      simpl
     ).
-Defined.
 
 Theorem run_test_function_4_1 : test_function_4 <A E F> = Some <B D D>.
 Proof.
-  unfold test_function_4.
+  unfold test_function_4, test_function_4_part, ret.
+  (*evaluate_function solve_all.*)
+
+  (* can i use runProgDefinitionRec2 if i already have the recursive cases? *)
+  assert (forall i : bool, test_function_4 (if i then <E> else <F>) = Some <D>). {
+    intros.
+    destruct i;
+      unfold test_function_4, test_function_4_part, ret;
+      evaluate_function solve_all;
+      reflexivity.
+  }
+  Check runProgDefinitionRec2.
+  Check (runProgDefinitionRec2 H).
+  evaluate_function_alt solve_all.
+  rewrite (runProgDefinitionRec2 H).
   evaluate_function solve_all.
-  (* SO, this demonstrates the problem! *)
-  Fail Qed.
+  reflexivity.
+Qed.
+
+Check runProgR.
+
+Definition runnyProgR {A B : Type} (def : A -> Prog A B) (a : A) (b : B) : Prop :=
+  runProgR def (def a) b.
+
+Definition test_function_4_R := runnyProgR (fun t =>
+             Pmatch2
+               (fun x y => t = <A `x `y>)
+               (fun x y => Rec _ _ bool
+                               (fun b => if b then x else y)
+                               (fun rec => ret <B {rec true} {rec false}>)
+               )
+               (ret <D>)).
+Check test_function_4_R.
+Theorem run_test_function_4_1_R : test_function_4_R <A E F> <B D D>.
+Proof.
+
+  unfold test_function_4_R, runnyProgR.
+  evaluate_function solve_all.
+  evaluate_function_alt solve_all.
+  Check recR.
 Abort.
-
-
 (* a simpler demonstration of the problem: 
 
 again,
@@ -156,30 +201,70 @@ f _ = D
 but this time write the definition so it can't beta-normalize away the index family when
 applied to a free variable
 
-*)
+ *)
 
+Require Export Setoid.
+Require Export Relation_Definitions.
+Require Import Morphisms.
 
-Definition test_function_5 : QTerm -> option QTerm :=
-  runProg (fun t =>
+Instance bind_morphism (A : Type) (B : Type) (o : option A):
+         Proper (pointwise_relation A eq ==> eq) (@bind A B o).
+Proof.
+  simpl_relation.
+  unfold pointwise_relation in H.
+  Require Import FunctionalExtensionality.
+  apply functional_extensionality in H.
+  subst.
+  reflexivity.
+Qed.
+
+Check bind.
+Check collectOption.
+Instance collectOption_morphism (A : Type) (B : Type):
+  Proper (pointwise_relation A eq ==> eq) (@collectOption A B).
+Proof.
+  simpl_relation.
+  unfold pointwise_relation in H.
+  apply functional_extensionality in H.
+  subst.
+  reflexivity.
+Qed.
+
+Definition test_function_5_part := (fun t =>
              Pmatch
                (fun x => t = <A `x>)
                (fun x => Rec _ _ unit
                              (fun u => match u with tt => x end)
-                             (fun res => ret <B {res tt}>))
+                             (fun res => Ret _ _ (Some <B {res tt}>)))
                (ret <D>)).
+Check test_function_5_part.
+
+Definition test_function_5 : QTerm -> option QTerm := runProg test_function_5_part.
+
+Theorem runProgRewriteThing {A B : Type} {def : A -> Prog A B} {a}
+  : runProgImpl def (def a) = runProg def a.
+Proof.
+  reflexivity.
+Qed.
 
 Theorem run_test_function_5_1 : test_function_5 <A (A C)> = Some <B (B D)>.
 Proof.
   unfold test_function_5.
-  evaluate_function solve_all.
+  Print evaluate_function.
   
-  Check runProgDefinitionRec.
-  Check PmatchDef1.
-  Check @Pmatch.
-  Locate "with".
-  Set Printing All.
-  Check Pmatch.
-  Fail reflexivity.
+  evaluate_function solve_all.
+  unfold test_function_5_part.
+  fold test_function_5_part.
+  evaluate_function_alt solve_all.
+  evaluate_function solve_all.
+  Search runProgImpl Ret.
+  (* with the above setup, i can rewrite under bind! *)
+  setoid_rewrite runProgDefinitionRet.
+  setoid_rewrite runProgRewriteThing.
+  fold test_function_5.
+  (* ok, so now its in this form that depends on a recursive call *)
+
+  Check collectOptionDef.
 Abort.
 
 (*
